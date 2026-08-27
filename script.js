@@ -1,4 +1,3 @@
-
 // ===================== ACTIVATION SYSTEM CONSTANTS =====================
 const ACTIVATION_CODES_KEY = 'sub_activation_codes';
 const TRIAL_START_KEY = 'sub_trial_start';
@@ -1280,6 +1279,9 @@ function showSection(sectionId) {
         }
     });
     
+    // ✅ لو خرجنا من قسم "إضافة عميل" من غير ما نكمل، نلغي وضع "إضافة اشتراك لعميل موجود"
+    if (sectionId !== 'add-customer' && typeof unlockAddSubscriptionMode === 'function') unlockAddSubscriptionMode();
+
     // ✅ حدث البيانات حسب القسم + تصفير الفلاتر لما تدخل القسم
     if (sectionId === 'dashboard') renderDashboard();
     
@@ -1471,6 +1473,8 @@ function addCustomer(e) {
     const notes = document.getElementById('customerNotes').value.trim();
     const phone = document.getElementById('customerPhone').value.trim();
     const stockId = document.getElementById('customerStockItem').value;
+    const lockedGroupIdField = document.getElementById('customerGroupId');
+    const lockedGroupId = lockedGroupIdField ? lockedGroupIdField.value : '';
 
     if (services.length === 0) {
         showNotification('⚠️ مفيش خدمات! ضيف خدمة الأول من قسم الخدمات', 'warning');
@@ -1486,32 +1490,14 @@ function addCustomer(e) {
     const supplier = suppliers.find(s => s.id == supplierId);
     let stockItem = null;
 
-    // Handle stock selection - decrease remaining uses
-    if (stockId) {
-        stockItem = stock.find(s => s.id == stockId);
-        if (!stockItem) { showNotification('الحساب مش موجود', 'warning'); return; }
-        if (stockItem.remainingUses <= 0) { showNotification('الحساب ' + stockItem.email + ' خلص! اختار حساب تاني', 'warning'); return; }
-        stockItem.remainingUses -= 1;
-            // ✅ أضف مصروف الشراء تلقائياً
-    const purchaseExpense = {
-        id: Date.now() + Math.random(),
-        serviceId: serviceId,
-        serviceName: service.name,
-        serviceIcon: service.icon,
-        desc: `شراء من المورد - ${supplier ? supplier.name : 'غير محدد'} (${name})`,
-        amount: costPrice,
-        date: startDate || formatDate(new Date()),
-        notes: `مصروف شراء تلقائي - عميل: ${name}`,
-        customerId: customer.id,
-        isAutoPurchase: true
-    };
-    expenses.push(purchaseExpense);
-    saveExpenses();
-        saveData();
-    }
+    // ===== Unified Customer Profile: detect existing customer by locked group id or by name =====
+    let groupId = lockedGroupId || findGroupIdByName(name);
+    const isMerge = !!groupId;
+    if (!groupId) groupId = generateGroupId();
 
     const customer = {
-        id: Date.now(),
+        id: Date.now() + Math.floor(Math.random() * 100000),
+        customerId: groupId,
         name,
         source,
         serviceId,
@@ -1526,10 +1512,11 @@ function addCustomer(e) {
         endDate,
         notes,
         phone: phone || null,
-        stockId: stockItem ? stockItem.id : null,
-        deliveredEmail: stockItem ? stockItem.email : null,
-        deliveredPassword: stockItem ? stockItem.password : null,
+        stockId: null,
+        deliveredEmail: null,
+        deliveredPassword: null,
         status: 'active',
+        renewCount: 0,
         addedAt: new Date().toISOString(),
         subscriptionHistory: [{
             serviceId, serviceName: service.name, serviceIcon: service.icon, startDate, endDate,
@@ -1538,10 +1525,45 @@ function addCustomer(e) {
         }]
     };
 
+    // Handle stock selection - decrease remaining uses
+    if (stockId) {
+        stockItem = stock.find(s => s.id == stockId);
+        if (!stockItem) { showNotification('الحساب مش موجود', 'warning'); return; }
+        if (stockItem.remainingUses <= 0) { showNotification('الحساب ' + stockItem.email + ' خلص! اختار حساب تاني', 'warning'); return; }
+        stockItem.remainingUses -= 1;
+        customer.stockId = stockItem.id;
+        customer.deliveredEmail = stockItem.email;
+        customer.deliveredPassword = stockItem.password;
+
+        // ✅ أضف مصروف الشراء تلقائياً
+        const purchaseExpense = {
+            id: Date.now() + Math.random(),
+            serviceId: serviceId,
+            serviceName: service.name,
+            serviceIcon: service.icon,
+            desc: `شراء من المورد - ${supplier ? supplier.name : 'غير محدد'} (${name})`,
+            amount: costPrice,
+            date: startDate || formatDate(new Date()),
+            notes: `مصروف شراء تلقائي - عميل: ${name}`,
+            customerId: customer.id,
+            isAutoPurchase: true
+        };
+        expenses.push(purchaseExpense);
+        saveExpenses();
+        saveData();
+    }
+
     customers.push(customer);
+    logActivity(isMerge ? 'subscription_create' : 'customer_create', {
+        customerName: name, customerId: groupId, serviceName: service.name,
+        details: isMerge ? `إضافة اشتراك جديد (${service.name}) لعميل موجود: ${name}` : `إضافة عميل جديد: ${name}`
+    });
     saveData();
 
-    showNotification('✅ تم إضافة العميل ' + name + ' بنجاح!' + (stockItem ? ' (حساب: ' + stockItem.email + ')' : ''), 'success');
+    showNotification(
+        (isMerge ? '✅ تم إضافة اشتراك جديد للعميل ' : '✅ تم إضافة العميل ') + name + ' بنجاح!' + (stockItem ? ' (حساب: ' + stockItem.email + ')' : ''),
+        'success'
+    );
     playSound('success');
 
     resetForm();
@@ -1568,6 +1590,55 @@ function resetForm() {
     currentEndDate = new Date();
     renderCalendar('start', currentStartDate);
     renderCalendar('end', currentEndDate);
+    unlockAddSubscriptionMode();
+}
+
+// ===================== ADD-SUBSCRIPTION MODE (Feature 3b) =====================
+// يفعّل نفس نموذج "إضافة عميل" لكن مقفول على اسم عميل موجود، فيتضاف الاشتراك الجديد لملفه مباشرة
+function startAddSubscriptionFor(groupId) {
+    const info = getGroupInfo(groupId);
+    if (!info) return;
+    closeCustomerProfileModal();
+    showSection('add-customer');
+    const nameInput = document.getElementById('customerName');
+    nameInput.value = info.name;
+    nameInput.readOnly = true;
+    nameInput.style.opacity = '0.75';
+    if (info.phone) {
+        const phoneInput = document.getElementById('customerPhone');
+        if (phoneInput) phoneInput.value = info.phone;
+    }
+    let hidden = document.getElementById('customerGroupId');
+    if (!hidden) {
+        hidden = document.createElement('input');
+        hidden.type = 'hidden';
+        hidden.id = 'customerGroupId';
+        document.getElementById('customerForm').appendChild(hidden);
+    }
+    hidden.value = groupId;
+
+    let banner = document.getElementById('addSubscriptionBanner');
+    if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'addSubscriptionBanner';
+        banner.style.cssText = 'margin-bottom:18px;padding:14px 18px;background:rgba(16,185,129,0.1);border:1px solid var(--success);border-radius:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;';
+        const form = document.getElementById('customerForm');
+        form.parentNode.insertBefore(banner, form);
+    }
+    banner.innerHTML = `
+        <span style="font-weight:700;color:var(--success);"><i class="fas fa-user-check"></i> بتضيف اشتراك جديد للعميل: ${info.name}</span>
+        <button type="button" class="btn btn-outline" style="font-size:12px;" onclick="unlockAddSubscriptionMode()">إلغاء والإضافة كعميل جديد</button>
+    `;
+    banner.style.display = 'flex';
+}
+
+function unlockAddSubscriptionMode() {
+    const nameInput = document.getElementById('customerName');
+    if (nameInput) { nameInput.readOnly = false; nameInput.style.opacity = ''; }
+    const hidden = document.getElementById('customerGroupId');
+    if (hidden) hidden.value = '';
+    const banner = document.getElementById('addSubscriptionBanner');
+    if (banner) banner.style.display = 'none';
 }
 
 function updatePrice() {
@@ -1579,36 +1650,50 @@ function updatePrice() {
 }
 
 function deleteCustomer(id) {
-    if (confirm('هل أنت متأكد من حذف هذا العميل؟')) {
+    const numId = Number(id);
+    const customer = customers.find(c => c.id === numId);
+    if (!customer) return;
+    if (confirm('هل أنت متأكد من حذف اشتراك "' + customer.serviceName + '" الخاص بـ ' + customer.name + '؟')) {
         // ✅ امسح المصروف المرتبطة بالعميل
-        expenses = expenses.filter(e => e.customerId !== id);
+        expenses = expenses.filter(e => e.customerId !== numId);
         saveExpenses();
-        
-        customers = customers.filter(c => c.id !== id);
+
+        customers = customers.filter(c => c.id !== numId);
+        logActivity('subscription_delete', { customerName: customer.name, customerId: customer.customerId, serviceName: customer.serviceName, details: `حذف اشتراك ${customer.serviceName} لـ ${customer.name}` });
         saveData();
         renderAll();
-        showNotification('🗑️ تم حذف العميل والمصروف المرتبط', 'success');
+        closeCustomerProfileModal();
+        showNotification('🗑️ تم حذف الاشتراك والمصروف المرتبط', 'success');
     }
 }
 
-function renewCustomer(id) {
-    const customer = customers.find(c => c.id === id);
-    if (!customer) return;
-    
-    const start = new Date();
-    const end = new Date();
-    end.setMonth(end.getMonth() + 1);
-    
-    customer.startDate = formatDate(start);
-    customer.endDate = formatDate(end);
-    customer.status = 'active';
-    customer.renewedAt = new Date().toISOString();
-    customer.renewCount = (customer.renewCount || 0) + 1;
-    
+// حذف كل ملف العميل (كل الاشتراكات المرتبطة بنفس الاسم الموحّد)
+function deleteCustomerGroup(groupId) {
+    const subs = getGroupSubscriptions(groupId);
+    if (subs.length === 0) return;
+    const name = subs[0].name;
+    const msg = subs.length > 1
+        ? `هل أنت متأكد من حذف ملف العميل "${name}" بالكامل؟ (سيتم حذف ${subs.length} اشتراكات)`
+        : `هل أنت متأكد من حذف العميل "${name}"؟`;
+    if (!confirm(msg)) return;
+
+    const ids = subs.map(s => s.id);
+    expenses = expenses.filter(e => !ids.includes(e.customerId));
+    saveExpenses();
+
+    customers = customers.filter(c => c.customerId !== groupId);
+    logActivity('customer_delete', { customerName: name, customerId: groupId, details: `حذف ملف العميل ${name} بالكامل (${subs.length} اشتراك)` });
     saveData();
     renderAll();
-    showNotification('🔄 تم تجديد اشتراك ' + customer.name + ' (' + customer.renewCount + ' مرة)', 'success');
-    playSound('success');
+    closeCustomerProfileModal();
+    showNotification('🗑️ تم حذف ملف العميل بالكامل', 'success');
+}
+
+// زر التجديد السريع: بيفتح نافذة اختيار الاشتراك والمدة (Feature 4 + 5)
+function renewCustomer(id) {
+    const customer = customers.find(c => c.id === Number(id));
+    if (!customer) return;
+    openRenewalModal(customer.customerId, customer.id);
 }
 
 function getStatus(customer) {
@@ -1651,6 +1736,239 @@ function getSourceName(source) {
         other: 'أخرى'
     };
     return names[source] || source;
+}
+
+// ===================== UNIFIED CUSTOMER PROFILE (GROUPING) =====================
+// نفس اسم العميل = نفس الملف الموحّد. كل اشتراكاته بتترابط بـ customerId واحد
+// بدون ما نلمس شكل تخزين كل اشتراك، عشان التوافق الكامل مع البيانات القديمة.
+function normalizeCustomerName(name) {
+    return (name || '').toString().trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function generateGroupId() {
+    return 'grp_' + Date.now() + '_' + Math.floor(Math.random() * 1000000);
+}
+
+function findGroupIdByName(name) {
+    const norm = normalizeCustomerName(name);
+    if (!norm) return null;
+    const existing = customers.find(c => normalizeCustomerName(c.name) === norm);
+    return existing ? existing.customerId : null;
+}
+
+function getGroupSubscriptions(groupId) {
+    return customers.filter(c => c.customerId === groupId);
+}
+
+function getGroupInfo(groupId) {
+    const subs = getGroupSubscriptions(groupId);
+    if (subs.length === 0) return null;
+    const byRecent = [...subs].sort((a, b) => new Date(b.addedAt || 0) - new Date(a.addedAt || 0));
+    const phone = byRecent.find(s => s.phone)?.phone || null;
+    return { groupId, name: byRecent[0].name, phone, source: byRecent[0].source, subs };
+}
+
+// يجمع أي قائمة اشتراكات (فلترة/بحث) في ملفات عملاء موحّدة للعرض
+function groupCustomerList(list) {
+    const map = new Map();
+    list.forEach(c => {
+        if (!c.customerId) c.customerId = findGroupIdByName(c.name) || generateGroupId();
+        if (!map.has(c.customerId)) map.set(c.customerId, []);
+        map.get(c.customerId).push(c);
+    });
+    const groups = [];
+    map.forEach((subs, groupId) => {
+        const sortedSubs = sortCustomersByPriority(subs);
+        const byRecent = [...subs].sort((a, b) => new Date(b.addedAt || 0) - new Date(a.addedAt || 0));
+        groups.push({
+            groupId,
+            name: byRecent[0].name,
+            phone: byRecent.find(s => s.phone)?.phone || null,
+            source: byRecent[0].source,
+            subs: sortedSubs,
+            primary: sortedSubs[0],
+            count: subs.length,
+            needsRenewal: subs.some(s => ['expired', 'expiring'].includes(getStatus(s).status))
+        });
+    });
+    return groups;
+}
+
+function sortGroupsByPriority(groups) {
+    const p = { expiring: 0, expired: 1, active: 2, completed: 3 };
+    return [...groups].sort((a, b) => {
+        const sa = getStatus(a.primary).status, sb = getStatus(b.primary).status;
+        const d = (p[sa] ?? 4) - (p[sb] ?? 4);
+        if (d !== 0) return d;
+        return new Date(a.primary.endDate) - new Date(b.primary.endDate);
+    });
+}
+
+// ===================== FULL EDITING (Feature 2) =====================
+function openEditProfileModal(groupId) {
+    const info = getGroupInfo(groupId);
+    if (!info) return;
+    document.getElementById('editProfileGroupId').value = groupId;
+    document.getElementById('editProfileName').value = info.name;
+    document.getElementById('editProfilePhone').value = info.phone || '';
+    document.getElementById('editProfileSource').value = info.source || 'whatsapp';
+    document.getElementById('editProfileModal').classList.add('show');
+}
+function closeEditProfileModal() { document.getElementById('editProfileModal').classList.remove('show'); }
+
+function saveEditProfile(e) {
+    e.preventDefault();
+    const groupId = document.getElementById('editProfileGroupId').value;
+    const newName = document.getElementById('editProfileName').value.trim();
+    const newPhone = document.getElementById('editProfilePhone').value.trim();
+    const newSource = document.getElementById('editProfileSource').value;
+    if (!newName) { showNotification('⚠️ أدخل اسم العميل', 'warning'); return; }
+
+    const subs = getGroupSubscriptions(groupId);
+    if (subs.length === 0) return;
+    const oldName = subs[0].name;
+    subs.forEach(s => {
+        s.name = newName;
+        s.phone = newPhone || null;
+        s.source = newSource;
+    });
+    logActivity('customer_edit', { customerName: newName, customerId: groupId, details: `تعديل بيانات العميل ${oldName}${oldName !== newName ? ' -> ' + newName : ''}` });
+    saveData();
+    renderAll();
+    closeEditProfileModal();
+    showCustomerProfile(groupId);
+    showNotification('✅ تم تحديث بيانات العميل', 'success');
+    playSound('success');
+}
+
+function openEditSubscriptionModal(subId) {
+    const sub = customers.find(c => c.id === Number(subId));
+    if (!sub) return;
+    document.getElementById('editSubId').value = sub.id;
+    const serviceSel = document.getElementById('editSubService');
+    serviceSel.innerHTML = services.map(s => `<option value="${s.id}">${s.icon} ${s.name}</option>`).join('');
+    serviceSel.value = sub.serviceId;
+    const supplierSel = document.getElementById('editSubSupplier');
+    supplierSel.innerHTML = '<option value="">بدون مورد</option>' + suppliers.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+    supplierSel.value = sub.supplierId || '';
+    document.getElementById('editSubCostPrice').value = sub.costPrice || 0;
+    document.getElementById('editSubSellPrice').value = sub.sellPrice || sub.price || 0;
+    document.getElementById('editSubStartDate').value = sub.startDate;
+    document.getElementById('editSubEndDate').value = sub.endDate;
+    document.getElementById('editSubNotes').value = sub.notes || '';
+    document.getElementById('editSubscriptionModal').classList.add('show');
+}
+function closeEditSubscriptionModal() { document.getElementById('editSubscriptionModal').classList.remove('show'); }
+
+function saveEditSubscription(e) {
+    e.preventDefault();
+    const id = Number(document.getElementById('editSubId').value);
+    const sub = customers.find(c => c.id === id);
+    if (!sub) return;
+
+    const serviceId = parseInt(document.getElementById('editSubService').value);
+    const service = services.find(s => s.id === serviceId);
+    const supplierId = document.getElementById('editSubSupplier').value;
+    const supplier = suppliers.find(s => s.id == supplierId);
+    const startDate = document.getElementById('editSubStartDate').value;
+    const endDate = document.getElementById('editSubEndDate').value;
+    if (!service || !startDate || !endDate) { showNotification('⚠️ يرجى ملء جميع الحقول المطلوبة', 'warning'); return; }
+
+    sub.serviceId = serviceId;
+    sub.serviceName = service.name;
+    sub.serviceIcon = service.icon;
+    sub.supplierId = supplierId || null;
+    sub.supplierName = supplier ? supplier.name : null;
+    sub.costPrice = parseFloat(document.getElementById('editSubCostPrice').value) || 0;
+    sub.sellPrice = parseFloat(document.getElementById('editSubSellPrice').value) || 0;
+    sub.price = sub.sellPrice;
+    sub.startDate = startDate;
+    sub.endDate = endDate;
+    sub.notes = document.getElementById('editSubNotes').value.trim();
+
+    logActivity('subscription_edit', { customerName: sub.name, customerId: sub.customerId, serviceName: service.name, details: `تعديل اشتراك ${service.name} لـ ${sub.name}` });
+    saveData();
+    renderAll();
+    closeEditSubscriptionModal();
+    showCustomerProfile(sub.customerId);
+    showNotification('✅ تم حفظ تعديلات الاشتراك', 'success');
+    playSound('success');
+}
+
+function deleteSubscription(subId) {
+    const sub = customers.find(c => c.id === Number(subId));
+    if (!sub) return;
+    deleteCustomer(sub.id);
+}
+
+// ===================== RENEWAL (Feature 4 + 5) =====================
+function openRenewalModal(groupId, preselectSubId) {
+    const subs = getGroupSubscriptions(groupId);
+    if (subs.length === 0) return;
+    document.getElementById('renewalGroupId').value = groupId;
+
+    const sel = document.getElementById('renewalSubSelect');
+    const sortedSubs = sortCustomersByPriority(subs);
+    const defaultSub = preselectSubId ? subs.find(s => s.id === Number(preselectSubId)) : sortedSubs.find(s => ['expired', 'expiring'].includes(getStatus(s).status)) || sortedSubs[0];
+    sel.innerHTML = sortedSubs.map(s => {
+        const st = getStatus(s);
+        return `<option value="${s.id}" ${defaultSub && s.id === defaultSub.id ? 'selected' : ''}>${s.serviceIcon} ${s.serviceName} - ${st.text} (حتى ${formatDateArabic(new Date(s.endDate))})</option>`;
+    }).join('');
+
+    document.getElementById('renewalDuration').value = '30';
+    document.getElementById('renewalCustomDays').value = '';
+    document.getElementById('renewalCustomDays').style.display = 'none';
+    document.getElementById('renewalModal').classList.add('show');
+}
+function closeRenewalModal() { document.getElementById('renewalModal').classList.remove('show'); }
+
+function toggleRenewalCustomDays() {
+    const val = document.getElementById('renewalDuration').value;
+    document.getElementById('renewalCustomDays').style.display = val === 'custom' ? 'block' : 'none';
+}
+
+function confirmRenewal(e) {
+    e.preventDefault();
+    const groupId = document.getElementById('renewalGroupId').value;
+    const subId = Number(document.getElementById('renewalSubSelect').value);
+    const sub = customers.find(c => c.id === subId);
+    if (!sub) return;
+
+    const durationVal = document.getElementById('renewalDuration').value;
+    let days = parseInt(durationVal);
+    if (durationVal === 'custom') {
+        days = parseInt(document.getElementById('renewalCustomDays').value);
+        if (!days || days <= 0) { showNotification('⚠️ أدخل عدد أيام صحيح', 'warning'); return; }
+    }
+
+    // نبدأ التجديد من النهاردة، أو من تاريخ انتهاء الاشتراك القديم لو لسه ماخلصش
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const oldEnd = new Date(sub.endDate); oldEnd.setHours(0, 0, 0, 0);
+    const newStart = oldEnd > today ? oldEnd : today;
+    const newEnd = new Date(newStart);
+    newEnd.setDate(newEnd.getDate() + days);
+
+    // احفظ نسخة من الدورة القديمة في سجل الاشتراك الخاص بيه
+    if (!Array.isArray(sub.subscriptionHistory)) sub.subscriptionHistory = [];
+    sub.subscriptionHistory.push({
+        serviceId: sub.serviceId, serviceName: sub.serviceName, serviceIcon: sub.serviceIcon,
+        startDate: sub.startDate, endDate: sub.endDate, costPrice: sub.costPrice, sellPrice: sub.sellPrice,
+        supplierId: sub.supplierId, status: 'completed', isRenewal: false, createdAt: sub.addedAt || new Date().toISOString()
+    });
+
+    sub.startDate = formatDate(newStart);
+    sub.endDate = formatDate(newEnd);
+    sub.status = 'active';
+    sub.renewedAt = new Date().toISOString();
+    sub.renewCount = (sub.renewCount || 0) + 1;
+
+    logActivity('subscription_renew', { customerName: sub.name, customerId: groupId, serviceName: sub.serviceName, details: `تجديد اشتراك ${sub.serviceName} لـ ${sub.name} (${days} يوم)` });
+    saveData();
+    renderAll();
+    closeRenewalModal();
+    if (document.getElementById('customerProfileModal').classList.contains('show')) showCustomerProfile(groupId);
+    showNotification('🔄 تم تجديد اشتراك ' + sub.name + ' (' + sub.serviceName + ') لمدة ' + days + ' يوم', 'success');
+    playSound('success');
 }
 
 // ===================== SERVICES =====================
@@ -2126,7 +2444,7 @@ function renderExpiring() {
                     return `
                     <tr>
                         <td>
-                            <div class="customer-info">
+                            <div class="customer-info" style="cursor:pointer" onclick="showCustomerProfile('${c.customerId}')">
                                 <div class="customer-avatar">${c.name.charAt(0)}</div>
                                 <div>
                                     <div class="customer-name">${c.name}</div>
@@ -2139,7 +2457,7 @@ function renderExpiring() {
                         <td><span class="status-badge ${st.class}">${st.text}</span></td>
                         <td>
                             <div class="action-btns">
-                                <button class="action-btn renew" onclick="renewCustomer(${c.id})" title="تجديد"><i class="fas fa-sync-alt"></i></button>
+                                <button class="action-btn renew" onclick="openRenewalModal('${c.customerId}', ${c.id})" title="تجديد"><i class="fas fa-sync-alt"></i></button>
                                 <button class="action-btn delete" onclick="deleteCustomer(${c.id})" title="حذف"><i class="fas fa-trash"></i></button>
                             </div>
                         </td>
@@ -3242,7 +3560,17 @@ function loadData() {
 
 function migrateOldData() {
     let migrated = false;
+    // ✅ Feature 1: كل عميل بنفس الاسم بيتربط بملف موحّد واحد (customerId) - بدون ما نغيّر شكل تخزين الاشتراكات القديمة
+    const groupByName = new Map();
     customers.forEach(c => {
+        if (c.customerId) return; // عنده ملف موحّد بالفعل
+        const norm = normalizeCustomerName(c.name);
+        if (!groupByName.has(norm)) groupByName.set(norm, generateGroupId());
+        c.customerId = groupByName.get(norm);
+        migrated = true;
+    });
+    customers.forEach(c => {
+        if (typeof c.renewCount !== 'number') { c.renewCount = c.renewedAt ? 1 : 0; migrated = true; }
         if (!c.supplierId) { c.supplierId = null; migrated = true; }
         if (!c.costPrice && c.price) { c.costPrice = c.price * 0.7; c.sellPrice = c.price; migrated = true; }
         if (!c.subscriptionHistory) {
@@ -3521,29 +3849,26 @@ function updateSuppliersSelect() {
     const msg = document.getElementById('noSuppliersMsg');
     if (msg) msg.style.display = suppliers.length===0?'block':'none';
 }
-// ===================== CUSTOMER PROFILE =====================
-function getCustomerStatus(c) {
-    const all = getAllCustomerSubscriptions(c.id);
+// ===================== CUSTOMER PROFILE (UNIFIED - Feature 1) =====================
+function getCustomerStatus(groupId) {
+    const all = getGroupSubscriptions(groupId);
     const spent = all.reduce((sum,s) => sum+(parseFloat(s.sellPrice)||0),0);
-    const renewals = all.filter(s => s.isRenewal).length;
+    const renewals = all.reduce((sum,s) => sum + (s.renewCount||0), 0);
     if (spent > 5000 || all.length >= 5) return 'vip';
     if (all.length <= 1 && !renewals) return 'new';
     return 'regular';
 }
 function getCustomerStatusLabel(st) { return {vip:'VIP',regular:'عادي',new:'جديد'}[st]||st; }
-function getAllCustomerSubscriptions(cid) {
-    const cur = customers.filter(c => c.id === cid);
-    const hist = subscriptionHistory.filter(h => h.customerId === cid);
-    return [...cur,...hist];
-}
+// موجودة للتوافق مع أي كود قديم بيستخدمها
+function getAllCustomerSubscriptions(groupId) { return getGroupSubscriptions(groupId); }
 
-function showCustomerProfile(cid) {
-    const c = customers.find(x => x.id === cid); if (!c) return;
-    const all = getAllCustomerSubscriptions(cid);
-    const st = getCustomerStatus(c);
+function showCustomerProfile(groupId) {
+    const info = getGroupInfo(groupId); if (!info) return;
+    const all = info.subs;
+    const st = getCustomerStatus(groupId);
     const spent = all.reduce((sum,s) => sum+(parseFloat(s.sellPrice)||0),0);
     const profit = all.reduce((sum,s) => sum+((parseFloat(s.sellPrice)||0)-(parseFloat(s.costPrice)||0)),0);
-    const renewals = all.filter(s => s.isRenewal).length;
+    const renewals = all.reduce((sum,s) => sum + (s.renewCount||0), 0);
     const avgDur = all.length>0 ? all.reduce((sum,s) => {
         const d = Math.round((new Date(s.endDate)-new Date(s.startDate))/(1000*60*60*24));
         return sum+d;
@@ -3552,10 +3877,11 @@ function showCustomerProfile(cid) {
     const mp = Object.entries(pc).sort((a,b) => b[1]-a[1])[0];
     const sorted = [...all].sort((a,b) => new Date(a.startDate)-new Date(b.startDate));
     const fp = sorted[0], lp = sorted[sorted.length-1];
-    const acts = activityLog.filter(a => a.customerId===cid || a.customerName===c.name);
+    const acts = activityLog.filter(a => a.customerId===groupId || a.customerName===info.name);
     const m = document.getElementById('customerProfileModal');
     const cont = document.getElementById('customerProfileContent');
-    document.getElementById('customerProfileTitle').textContent = 'ملف العميل: ' + c.name;
+    document.getElementById('customerProfileTitle').textContent = 'ملف العميل: ' + info.name;
+    const c = { name: info.name, phone: info.phone, source: info.source };
     cont.innerHTML = `
         <div class="customer-profile-header">
             <div class="customer-profile-avatar ${st}">${c.name.charAt(0)}</div>
@@ -3564,11 +3890,14 @@ function showCustomerProfile(cid) {
                 <div class="customer-profile-meta">
                     <div class="customer-profile-phone"><i class="fas fa-phone"></i> ${getSourceIcon(c.source)} ${getSourceName(c.source)}</div>
                     ${c.phone ? `<div class="customer-profile-phone"><i class="fas fa-mobile-alt" style="color:var(--success)"></i> ${c.phone}</div>` : ''}
-                    ${c.deliveredEmail ? `<div class="customer-profile-phone" style="font-size:13px;direction:ltr;text-align:right;"><i class="fas fa-envelope" style="color:var(--primary)"></i> <strong>${c.deliveredEmail}</strong></div>` : ''}
-                    ${c.deliveredPassword ? `<div class="customer-profile-phone" style="font-size:13px;direction:ltr;text-align:right;"><i class="fas fa-key" style="color:var(--warning)"></i> <strong>${c.deliveredPassword}</strong></div>` : ''}
                     <div class="customer-status-badge${st}"><i class="fas fa-crown" style="font-size:10px"></i> ${getCustomerStatusLabel(st)}</div>
                 </div>
             </div>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;">
+            <button class="btn btn-outline" style="font-size:13px;" onclick="openEditProfileModal('${groupId}')"><i class="fas fa-user-edit"></i> تعديل بيانات العميل</button>
+            <button class="btn btn-primary" style="font-size:13px;" onclick="startAddSubscriptionFor('${groupId}')"><i class="fas fa-plus"></i> إضافة اشتراك جديد</button>
+            <button class="btn btn-outline" style="font-size:13px;color:var(--danger);border-color:var(--danger);" onclick="deleteCustomerGroup('${groupId}')"><i class="fas fa-trash"></i> حذف ملف العميل</button>
         </div>
         <div class="customer-profile-stats">
             <div class="customer-profile-stat"><div class="value subscriptions">${all.length}</div><div class="label">الاشتراكات</div></div>
@@ -3586,17 +3915,18 @@ function showCustomerProfile(cid) {
             </div>
         </div>
         <div class="card" style="margin-bottom:20px;">
-            <div class="card-title"><i class="fas fa-list" style="color:var(--success)"></i> جميع الاشتراكات</div>
+            <div class="card-title"><i class="fas fa-list" style="color:var(--success)"></i> جميع الاشتراكات (${all.length})</div>
             <div class="customer-subscriptions-timeline">
-                ${all.length===0?'<p style="color:var(--gray);text-align:center;">لا توجد</p>':all.sort((a,b)=>new Date(b.startDate)-new Date(a.startDate)).map(s => {
+                ${all.length===0?'<p style="color:var(--gray);text-align:center;">لا توجد</p>':[...all].sort((a,b)=>new Date(b.startDate)-new Date(a.startDate)).map(s => {
                     const st2 = getStatus(s);
                     const start = new Date(s.startDate), end = new Date(s.endDate);
                     const dur = Math.round((end-start)/(1000*60*60*24));
                     const p = (parseFloat(s.sellPrice)||0)-(parseFloat(s.costPrice)||0);
                     const sup = suppliers.find(sp => sp.id==s.supplierId);
+                    const canRenew = st2.status === 'expired' || st2.status === 'expiring';
                     return `<div class="subscription-timeline-item ${st2.status}">
                         <div class="subscription-timeline-header">
-                            <div class="subscription-timeline-service"><span>${s.serviceIcon||'📦'}</span> ${s.serviceName||'-'} ${s.isRenewal?'<span style="color:var(--success);font-size:11px"><i class="fas fa-redo"></i> تجديد</span>':''}</div>
+                            <div class="subscription-timeline-service"><span>${s.serviceIcon||'📦'}</span> ${s.serviceName||'-'} ${s.renewCount?`<span style="color:var(--success);font-size:11px"><i class="fas fa-redo"></i> اتجدد ${s.renewCount} مرة</span>`:''}</div>
                             <span class="status-badge ${st2.class}">${st2.text}</span>
                         </div>
                         <div class="subscription-timeline-dates">
@@ -3609,8 +3939,17 @@ function showCustomerProfile(cid) {
                             <div class="field"><span>المورد</span><strong>${sup?sup.name:'غير محدد'}</strong></div>
                             <div class="field"><span>الحالة</span><strong>${st2.text}</strong></div>
                         </div>
-                        <div class="subscription-timeline-footer">
+                        ${s.deliveredEmail || s.deliveredPassword ? `<div style="margin-top:8px;font-size:12px;color:var(--gray);">
+                            ${s.deliveredEmail ? `<div style="direction:ltr;text-align:right;"><i class="fas fa-envelope" style="color:var(--primary)"></i> <strong>${s.deliveredEmail}</strong></div>` : ''}
+                            ${s.deliveredPassword ? `<div style="direction:ltr;text-align:right;"><i class="fas fa-key" style="color:var(--warning)"></i> <strong>${s.deliveredPassword}</strong></div>` : ''}
+                        </div>` : ''}
+                        <div class="subscription-timeline-footer" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
                             <span style="color:var(--gray);font-size:13px">الربح: <span class="subscription-profit">${p.toLocaleString()} ج.م</span></span>
+                            <div class="action-btns">
+                                <button class="action-btn edit" onclick="openEditSubscriptionModal(${s.id})" title="تعديل"><i class="fas fa-edit"></i></button>
+                                ${canRenew ? `<button class="action-btn renew" onclick="openRenewalModal('${groupId}', ${s.id})" title="تجديد"><i class="fas fa-sync-alt"></i></button>` : ''}
+                                <button class="action-btn delete" onclick="deleteSubscription(${s.id})" title="حذف"><i class="fas fa-trash"></i></button>
+                            </div>
                         </div>
                     </div>`;
                 }).join('')}
@@ -3660,15 +3999,16 @@ function renderDashboard() {
     const totalExp = expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
     document.getElementById('totalProfit').textContent = (revenue - totalCost - totalExp).toLocaleString() + ' ج.م';
     
-    const sorted = sortCustomersByPriority(customers).slice(0, 10);
+    const groups = sortGroupsByPriority(groupCustomerList(customers)).slice(0, 10);
     const container = document.getElementById('recentCustomers');
-    if (sorted.length === 0) {
+    if (groups.length === 0) {
         container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">👥</div><div class="empty-state-title">لا يوجد عملاء</div><div class="empty-state-text">ابدأ بإضافة عميل</div><button class="btn btn-primary" onclick="showSection(\'add-customer\')"><i class="fas fa-plus"></i> إضافة</button></div>';
         return;
     }
-    container.innerHTML = buildCustomerTable(sorted, true) + buildCustomerCards(sorted, true);
+    container.innerHTML = buildCustomerTable(groups, true) + buildCustomerCards(groups, true);
 }
 
+// ===================== CUSTOMER LIST: كل عميل بيظهر مرة واحدة، وكل اشتراكاته مدموجة جواه (Feature 1) =====================
 function renderCustomers() {
     const container = document.getElementById('customersTableContainer');
     const search = document.getElementById('customerSearch')?.value?.toLowerCase()||'';
@@ -3676,62 +4016,76 @@ function renderCustomers() {
     let filtered = customers;
     if (search) filtered = filtered.filter(c => c.name.toLowerCase().includes(search) || c.serviceName.toLowerCase().includes(search));
     if (statusFilter !== 'all') filtered = filtered.filter(c => getStatus(c).status === statusFilter);
-    filtered = sortCustomersByPriority(filtered);
-    if (filtered.length === 0) {
+    const groups = sortGroupsByPriority(groupCustomerList(filtered));
+    if (groups.length === 0) {
         container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📋</div><div class="empty-state-title">لا يوجد عملاء</div><div class="empty-state-text">أضف عميلك الأول</div></div>';
         return;
     }
-    container.innerHTML = buildCustomerTable(filtered, false) + buildCustomerCards(filtered, false);
+    const counterHTML = `
+        <div style="margin-bottom: 15px; padding: 12px 18px; background: rgba(99,102,241,0.08); border-radius: 14px; border: 1px solid var(--glass-border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+            <span style="font-weight: 700; color: var(--primary); font-size: 15px;"><i class="fas fa-users"></i> إجمالي العملاء: ${groupCustomerList(customers).length} (${customers.length} اشتراك)</span>
+            <span style="color: var(--gray); font-size: 14px; font-weight: 600;">معروض: ${groups.length}</span>
+        </div>`;
+    container.innerHTML = counterHTML + buildCustomerTable(groups, false) + buildCustomerCards(groups, false);
 }
 
-function buildCustomerTable(list, isDashboard) {
+function buildCustomerTable(groups, isDashboard) {
     return `<table class="data-table"><thead><tr><th>العميل</th><th>الخدمة</th>${!isDashboard?'<th>البداية</th>':''}<th>الانتهاء</th>${!isDashboard?'<th>المورد</th>':''}<th>الحالة</th><th>إجراءات</th></tr></thead><tbody>` +
-    list.map(c => {
+    groups.map(g => {
+        const c = g.primary;
         const st = getStatus(c);
         const end = new Date(c.endDate); end.setHours(0,0,0,0);
         const today = new Date(); today.setHours(0,0,0,0);
         const daysLeft = Math.round((end-today)/(1000*60*60*24));
-        const isRenewed = c.renewedAt && c.addedAt && new Date(c.renewedAt) > new Date(c.addedAt);
+        const isRenewed = c.renewCount > 0;
         const supplier = suppliers.find(s => s.id == c.supplierId);
+        const countBadge = g.count > 1 ? `<span style="background:rgba(99,102,241,0.2);color:var(--primary);font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;margin-right:6px;">×${g.count}</span>` : '';
+        const serviceCell = g.count > 1
+            ? `<span class="service-tag">${c.serviceIcon} ${c.serviceName}</span> <span style="color:var(--gray);font-size:12px;">+${g.count - 1} أخرى</span>`
+            : `<span class="service-tag">${c.serviceIcon} ${c.serviceName}</span>
+               ${c.deliveredEmail ? `<div style="font-size:12px;color:var(--primary);margin-top:4px;"><i class="fas fa-envelope" style="margin-left:4px;"></i>${c.deliveredEmail}</div>` : ''}
+               ${c.deliveredPassword ? `<div style="font-size:12px;color:var(--warning);margin-top:2px;"><i class="fas fa-key" style="margin-left:4px;"></i>${c.deliveredPassword}</div>` : ''}`;
         return `<tr style="${st.status==='completed'||st.status==='expired'?'opacity:0.6;background:rgba(239,68,68,0.05);':''}">
-            <td><div class="customer-info" style="cursor:pointer" onclick="showCustomerProfile(${c.id})"><div class="customer-avatar" style="${isRenewed?'background:linear-gradient(135deg,var(--success),#059669);':''}">${isRenewed?'<i class="fas fa-sync-alt"></i>':c.name.charAt(0)}</div><div><div class="customer-name">${c.name} ${isRenewed?'<span style="color:var(--success);font-size:11px;margin-right:5px"><i class="fas fa-redo"></i></span>':''}</div><div class="customer-source">${getSourceIcon(c.source)} ${getSourceName(c.source)}</div></div></div></td>
-            <td>
-                <span class="service-tag">${c.serviceIcon} ${c.serviceName}</span>
-                ${c.deliveredEmail ? `<div style="font-size:12px;color:var(--primary);margin-top:4px;"><i class="fas fa-envelope" style="margin-left:4px;"></i>${c.deliveredEmail}</div>` : ''}
-                ${c.deliveredPassword ? `<div style="font-size:12px;color:var(--warning);margin-top:2px;"><i class="fas fa-key" style="margin-left:4px;"></i>${c.deliveredPassword}</div>` : ''}
-            </td>
+            <td><div class="customer-info" style="cursor:pointer" onclick="showCustomerProfile('${g.groupId}')"><div class="customer-avatar" style="${isRenewed?'background:linear-gradient(135deg,var(--success),#059669);':''}">${isRenewed?'<i class="fas fa-sync-alt"></i>':g.name.charAt(0)}</div><div><div class="customer-name">${g.name} ${countBadge}${isRenewed?'<span style="color:var(--success);font-size:11px;margin-right:5px"><i class="fas fa-redo"></i></span>':''}</div><div class="customer-source">${getSourceIcon(g.source)} ${getSourceName(g.source)}${g.phone?' · '+g.phone:''}</div></div></div></td>
+            <td>${serviceCell}</td>
             ${!isDashboard?`<td>${formatDateArabic(new Date(c.startDate))}</td>`:''}
             <td>${formatDateArabic(new Date(c.endDate))}${daysLeft>0&&st.status!=='completed'?'<br><span style="color:var(--gray);font-size:12px">('+daysLeft+' '+(daysLeft===1?'يوم':'أيام')+')</span>':''}${daysLeft===0&&st.status!=='completed'?'<br><span style="color:var(--warning);font-size:12px">(ينتهي اليوم)</span>':''}${daysLeft<0?'<br><span style="color:var(--danger);font-size:12px">(من '+Math.abs(daysLeft)+')</span>':''}</td>
             ${!isDashboard?`<td>${supplier?supplier.name:'<span style="color:var(--gray)">-</span>'}</td>`:''}
             <td><span class="status-badge ${st.class}">${st.text}</span></td>
-            <td><div class="action-btns"><button class="action-btn" onclick="showCustomerProfile(${c.id})" title="عرض" style="background:rgba(99,102,241,0.15);color:var(--primary)"><i class="fas fa-eye"></i></button>${st.status!=='completed'&&st.status!=='expired'?`<button class="action-btn renew" onclick="renewCustomer(${c.id})" title="تجديد"><i class="fas fa-sync-alt"></i></button>`:`<button class="action-btn renew" onclick="renewCustomer(${c.id})" title="تجديد" style="background:rgba(16,185,129,0.3)"><i class="fas fa-redo"></i></button>`}<button class="action-btn delete" onclick="deleteCustomer(${c.id})" title="حذف"><i class="fas fa-trash"></i></button></div></td>
+            <td><div class="action-btns">
+                <button class="action-btn" onclick="showCustomerProfile('${g.groupId}')" title="عرض الملف" style="background:rgba(99,102,241,0.15);color:var(--primary)"><i class="fas fa-eye"></i></button>
+                ${g.needsRenewal ? `<button class="action-btn renew" onclick="openRenewalModal('${g.groupId}')" title="تجديد" style="background:rgba(16,185,129,0.3)"><i class="fas fa-redo"></i></button>` : ''}
+                <button class="action-btn delete" onclick="deleteCustomerGroup('${g.groupId}')" title="حذف"><i class="fas fa-trash"></i></button>
+            </div></td>
         </tr>`;
     }).join('') + '</tbody></table>';
 }
 
-function buildCustomerCards(list, isDashboard) {
-    return '<div class="customers-mobile-cards">' + list.map(c => {
+function buildCustomerCards(groups, isDashboard) {
+    return '<div class="customers-mobile-cards">' + groups.map(g => {
+        const c = g.primary;
         const st = getStatus(c);
         const end = new Date(c.endDate); end.setHours(0,0,0,0);
         const today = new Date(); today.setHours(0,0,0,0);
         const daysLeft = Math.round((end-today)/(1000*60*60*24));
-        const isRenewed = c.renewedAt && c.addedAt && new Date(c.renewedAt) > new Date(c.addedAt);
+        const isRenewed = c.renewCount > 0;
         const supplier = suppliers.find(s => s.id == c.supplierId);
         let dc = 'active', dt = '';
         if (daysLeft > 0) { dt = daysLeft + ' ' + (daysLeft===1?'يوم':'أيام'); }
         else if (daysLeft === 0) { dt = 'ينتهي اليوم!'; dc = 'expiring'; }
         else { dt = 'من ' + Math.abs(daysLeft) + ' ' + (Math.abs(daysLeft)===1?'يوم':'أيام'); dc = 'expired'; }
-        return `<div class="customer-mobile-card status-${st.status}" onclick="toggleCard(this,event)" data-customer-id="${c.id}">
-            <div class="customer-card-header" onclick="event.stopPropagation();showCustomerProfile(${c.id})">
-                <div class="customer-card-avatar ${isRenewed?'renewed':''}">${isRenewed?'<i class="fas fa-redo"></i>':c.name.charAt(0)}</div>
-                <div class="customer-card-info"><div class="customer-card-name">${c.name}${isRenewed?'<span class="renew-badge"><i class="fas fa-redo"></i></span>':''}</div><div class="customer-card-service"><span class="service-icon">${c.serviceIcon}</span>${c.serviceName}</div></div>
+        const serviceLabel = g.count > 1 ? `${g.count} اشتراكات (آخرها ${c.serviceName})` : c.serviceName;
+        return `<div class="customer-mobile-card status-${st.status}" onclick="toggleCard(this,event)" data-customer-id="${g.groupId}">
+            <div class="customer-card-header" onclick="event.stopPropagation();showCustomerProfile('${g.groupId}')">
+                <div class="customer-card-avatar ${isRenewed?'renewed':''}">${isRenewed?'<i class="fas fa-redo"></i>':g.name.charAt(0)}</div>
+                <div class="customer-card-info"><div class="customer-card-name">${g.name}${g.count>1?` <span style="font-size:11px;color:var(--primary);">×${g.count}</span>`:''}${isRenewed?'<span class="renew-badge"><i class="fas fa-redo"></i></span>':''}</div><div class="customer-card-service"><span class="service-icon">${c.serviceIcon}</span>${serviceLabel}</div></div>
                 <div class="customer-card-meta"><div class="customer-card-price">${(c.sellPrice||c.price||0).toLocaleString()} ج.م</div><div class="customer-card-status-compact status-${st.status}"><i class="fas fa-circle" style="font-size:6px"></i> ${st.text.split(' ')[0]}</div></div>
             </div>
             <div class="customer-card-expand"><i class="fas fa-chevron-down"></i></div>
             <div class="customer-card-body" onclick="event.stopPropagation()">
                 <div class="customer-card-field"><div class="customer-card-label">الحالة</div><div class="customer-card-value days-left ${dc}">${dt}</div></div>
-                <div class="customer-card-field"><div class="customer-card-label">المصدر</div><div class="customer-card-value"><span class="customer-card-source-icon">${getSourceIcon(c.source)}</span>${getSourceName(c.source)}</div></div>
-                ${c.phone ? `<div class="customer-card-field"><div class="customer-card-label">رقم الهاتف</div><div class="customer-card-value"><i class="fas fa-phone" style="color:var(--success);margin-left:5px;"></i>${c.phone}</div></div>` : ''}
+                <div class="customer-card-field"><div class="customer-card-label">المصدر</div><div class="customer-card-value"><span class="customer-card-source-icon">${getSourceIcon(g.source)}</span>${getSourceName(g.source)}</div></div>
+                ${g.phone ? `<div class="customer-card-field"><div class="customer-card-label">رقم الهاتف</div><div class="customer-card-value"><i class="fas fa-phone" style="color:var(--success);margin-left:5px;"></i>${g.phone}</div></div>` : ''}
                 ${c.deliveredEmail ? `<div class="customer-card-field full-width"><div class="customer-card-label">الإيميل المسلّم</div><div class="customer-card-value" style="color:var(--primary);font-size:13px;direction:ltr;text-align:right;"><i class="fas fa-envelope" style="margin-left:5px;"></i>${c.deliveredEmail}</div></div>` : ''}
                 ${c.deliveredPassword ? `<div class="customer-card-field full-width"><div class="customer-card-label">باسورد الإيميل</div><div class="customer-card-value" style="color:var(--warning);font-size:13px;direction:ltr;text-align:right;"><i class="fas fa-key" style="margin-left:5px;"></i>${c.deliveredPassword}</div></div>` : ''}
                 <div class="customer-card-field"><div class="customer-card-label">المورد</div><div class="customer-card-value">${supplier?supplier.name:'-'}</div></div>
@@ -3743,9 +4097,9 @@ function buildCustomerCards(list, isDashboard) {
             <div class="customer-card-footer" onclick="event.stopPropagation()">
                 <span class="customer-card-status status-${st.status}"><i class="fas fa-circle" style="font-size:8px"></i> ${st.text}</span>
                 <div class="customer-card-actions">
-                    <button class="action-btn" onclick="showCustomerProfile(${c.id})" title="عرض" style="background:rgba(99,102,241,0.15);color:var(--primary)"><i class="fas fa-eye"></i></button>
-                    <button class="action-btn renew" onclick="renewCustomer(${c.id})" title="تجديد"><i class="fas fa-sync-alt"></i></button>
-                    <button class="action-btn delete" onclick="deleteCustomer(${c.id})" title="حذف"><i class="fas fa-trash"></i></button>
+                    <button class="action-btn" onclick="showCustomerProfile('${g.groupId}')" title="عرض الملف" style="background:rgba(99,102,241,0.15);color:var(--primary)"><i class="fas fa-eye"></i></button>
+                    ${g.needsRenewal ? `<button class="action-btn renew" onclick="openRenewalModal('${g.groupId}')" title="تجديد"><i class="fas fa-sync-alt"></i></button>` : ''}
+                    <button class="action-btn delete" onclick="deleteCustomerGroup('${g.groupId}')" title="حذف"><i class="fas fa-trash"></i></button>
                 </div>
             </div>
         </div>`;

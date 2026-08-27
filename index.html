@@ -491,6 +491,7 @@
                     بيانات العميل
                 </div>
                 <form id="customerForm" onsubmit="addCustomer(event)">
+                    <input type="hidden" id="customerGroupId" value="">
                     <div class="form-grid">
                         <div class="form-group">
                             <label class="form-label">اسم العميل *</label>
@@ -878,6 +879,124 @@
                 <button class="modal-close" onclick="closeCustomerProfileModal()"><i class="fas fa-times"></i></button>
             </div>
             <div id="customerProfileContent"></div>
+        </div>
+    </div>
+
+    <!-- Edit Customer Profile Modal (Feature 2) -->
+    <div class="modal-overlay" id="editProfileModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title"><i class="fas fa-user-edit"></i> تعديل بيانات العميل</h3>
+                <button class="modal-close" onclick="closeEditProfileModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <form onsubmit="saveEditProfile(event)">
+                <input type="hidden" id="editProfileGroupId">
+                <div class="form-group">
+                    <label class="form-label">اسم العميل *</label>
+                    <input type="text" class="form-input" id="editProfileName" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">رقم الهاتف</label>
+                    <input type="tel" class="form-input" id="editProfilePhone" placeholder="مثال: 01012345678">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">مصدر العميل *</label>
+                    <select class="form-select" id="editProfileSource" required>
+                        <option value="whatsapp">واتساب</option>
+                        <option value="messenger">مسنجر</option>
+                        <option value="telegram">تيليجرام</option>
+                        <option value="instagram">انستجرام</option>
+                        <option value="facebook">فيسبوك</option>
+                        <option value="direct">مباشر</option>
+                        <option value="other">أخرى</option>
+                    </select>
+                </div>
+                <div style="margin-top: 20px; display: flex; gap: 12px;">
+                    <button type="submit" class="btn btn-success"><i class="fas fa-check"></i> حفظ التعديلات</button>
+                    <button type="button" class="btn btn-outline" onclick="closeEditProfileModal()">إلغاء</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Subscription Modal (Feature 2) -->
+    <div class="modal-overlay" id="editSubscriptionModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title"><i class="fas fa-edit"></i> تعديل الاشتراك</h3>
+                <button class="modal-close" onclick="closeEditSubscriptionModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <form onsubmit="saveEditSubscription(event)">
+                <input type="hidden" id="editSubId">
+                <div class="form-group">
+                    <label class="form-label">الخدمة *</label>
+                    <select class="form-select" id="editSubService" required></select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">المورد</label>
+                    <select class="form-select" id="editSubSupplier"></select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">سعر الشراء *</label>
+                    <input type="number" class="form-input" id="editSubCostPrice" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">سعر البيع *</label>
+                    <input type="number" class="form-input" id="editSubSellPrice" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">تاريخ البداية *</label>
+                    <input type="date" class="form-input" id="editSubStartDate" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">تاريخ النهاية *</label>
+                    <input type="date" class="form-input" id="editSubEndDate" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">ملاحظات</label>
+                    <input type="text" class="form-input" id="editSubNotes">
+                </div>
+                <div style="margin-top: 20px; display: flex; gap: 12px;">
+                    <button type="submit" class="btn btn-success"><i class="fas fa-check"></i> حفظ التعديلات</button>
+                    <button type="button" class="btn btn-outline" onclick="closeEditSubscriptionModal()">إلغاء</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Renewal Modal (Feature 4 + 5) -->
+    <div class="modal-overlay" id="renewalModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title"><i class="fas fa-sync-alt"></i> تجديد اشتراك</h3>
+                <button class="modal-close" onclick="closeRenewalModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <form onsubmit="confirmRenewal(event)">
+                <input type="hidden" id="renewalGroupId">
+                <div class="form-group">
+                    <label class="form-label">اختر الاشتراك المطلوب تجديده *</label>
+                    <select class="form-select" id="renewalSubSelect" required></select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">مدة التجديد *</label>
+                    <select class="form-select" id="renewalDuration" onchange="toggleRenewalCustomDays()" required>
+                        <option value="7">أسبوع (7 أيام)</option>
+                        <option value="30" selected>شهر (30 يوم)</option>
+                        <option value="90">3 شهور (90 يوم)</option>
+                        <option value="180">6 شهور (180 يوم)</option>
+                        <option value="365">سنة كاملة (365 يوم)</option>
+                        <option value="custom">مدة مخصصة...</option>
+                    </select>
+                </div>
+                <div class="form-group" id="renewalCustomDaysWrap">
+                    <label class="form-label">عدد الأيام المخصص</label>
+                    <input type="number" class="form-input" id="renewalCustomDays" min="1" style="display:none;" placeholder="أدخل عدد الأيام">
+                </div>
+                <div style="margin-top: 20px; display: flex; gap: 12px;">
+                    <button type="submit" class="btn btn-success"><i class="fas fa-check"></i> تأكيد التجديد</button>
+                    <button type="button" class="btn btn-outline" onclick="closeRenewalModal()">إلغاء</button>
+                </div>
+            </form>
         </div>
     </div>
 
