@@ -1795,12 +1795,23 @@ function groupCustomerList(list) {
 }
 
 function sortGroupsByPriority(groups) {
-    const p = { expiring: 0, expired: 1, active: 2, completed: 3 };
+    // الترتيب المطلوب: هينتهي (النهاردة/بكرة) فوق خالص -> نشط (الأحدث أولاً) -> مكتمل -> منتهي تحت خالص
+    const p = { expiring: 0, active: 1, completed: 2, expired: 3 };
     return [...groups].sort((a, b) => {
         const sa = getStatus(a.primary).status, sb = getStatus(b.primary).status;
         const d = (p[sa] ?? 4) - (p[sb] ?? 4);
         if (d !== 0) return d;
-        return new Date(a.primary.endDate) - new Date(b.primary.endDate);
+
+        // داخل "هينتهي": الي هينتهي النهاردة فوق الي هينتهي بكرة
+        if (sa === 'expiring') {
+            return new Date(a.primary.endDate) - new Date(b.primary.endDate);
+        }
+        // داخل "نشط": الأحدث إضافة فوق (من الأحدث للأقدم)
+        if (sa === 'active') {
+            return new Date(b.primary.addedAt || 0) - new Date(a.primary.addedAt || 0);
+        }
+        // داخل "منتهي/مكتمل": الأحدث انتهاءً فوق داخل نفس التصنيف
+        return new Date(b.primary.endDate) - new Date(a.primary.endDate);
     });
 }
 
