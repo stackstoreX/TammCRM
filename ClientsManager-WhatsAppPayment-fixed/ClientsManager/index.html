@@ -1,0 +1,1289 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام إدارة الاشتراكات - Tamm CRM</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css?v=4.0.0">
+    <meta name="theme-color" content="#6366f1">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Tamm CRM">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="logo.png">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <script>window.APP_VERSION = '4.0.0';</script>
+<base target="_blank">
+<base target="_blank">
+<base target="_blank">
+</head>
+<body>
+    <div class="bg-animation"></div>
+
+    <!-- ===== TRIAL LOCK SCREEN ===== -->
+    <div id="trialLockScreen" class="trial-lock-screen" style="display: none;">
+        <div class="trial-lock-content">
+            <div class="trial-lock-icon">🔒</div>
+            <h2 class="trial-lock-title">انتهت الفترة التجريبية!</h2>
+            <p class="trial-lock-text">
+                لقد انتهت الفترة التجريبية المجانية (24 ساعة)<br>
+                تواصل معنا على واتساب لتفعيل اشتراكك
+            </p>
+
+            <!-- Countdown Timer -->
+            <div class="trial-countdown" id="trialCountdown">
+                <span id="countdownHours">00</span>:
+                <span id="countdownMinutes">00</span>:
+                <span id="countdownSeconds">00</span>
+            </div>
+
+            <a href="https://wa.me/201018484572" class="btn btn-whatsapp" target="_blank">
+                <i class="fab fa-whatsapp"></i>
+                تواصل عبر واتساب (299 ج.م)
+            </a>
+
+            <div class="trial-divider">━━━━━━━━━━━━━━━━━━━━</div>
+
+            <p class="trial-lock-text">أدخل كود التفعيل اللي استلمته:</p>
+
+            <div class="activation-code-inputs">
+                <input type="password" class="code-digit" maxlength="1" data-index="0">
+                <input type="password" class="code-digit" maxlength="1" data-index="1">
+                <input type="password" class="code-digit" maxlength="1" data-index="2">
+                <input type="password" class="code-digit" maxlength="1" data-index="3">
+                <input type="password" class="code-digit" maxlength="1" data-index="4">
+                <input type="password" class="code-digit" maxlength="1" data-index="5">
+            </div>
+
+            <button class="btn btn-success" onclick="activateWithCode()" style="width: 100%; margin-top: 15px;">
+                <i class="fas fa-unlock"></i>
+                تفعيل
+            </button>
+
+            <p id="activationError" class="activation-error" style="display: none;">
+                ⚠️ الكود غير صحيح
+            </p>
+
+            <div class="trial-divider">━━━━━━━━━━━━━━━━━━━━</div>
+
+            <button class="btn btn-outline" onclick="showAdminLogin()" style="width: 100%;">
+                <i class="fas fa-user-shield"></i>
+                دخول الأدمن
+            </button>
+        </div>
+    </div>
+
+    <!-- ===== ADMIN LOGIN MODAL (for lock screen) ===== -->
+    <div id="adminLoginModal" class="modal-overlay" style="display: none; z-index: 10001;">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title">🔐 دخول الأدمن</h3>
+                <button class="modal-close" onclick="closeAdminLogin()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="form-group">
+                <label class="form-label">كود الأدمن السري (6 أحرف/أرقام)</label>
+                <div class="activation-code-inputs">
+                    <input type="password" class="code-digit admin-login-digit" maxlength="1" data-index="0">
+                    <input type="password" class="code-digit admin-login-digit" maxlength="1" data-index="1">
+                    <input type="password" class="code-digit admin-login-digit" maxlength="1" data-index="2">
+                    <input type="password" class="code-digit admin-login-digit" maxlength="1" data-index="3">
+                    <input type="password" class="code-digit admin-login-digit" maxlength="1" data-index="4">
+                    <input type="password" class="code-digit admin-login-digit" maxlength="1" data-index="5">
+                </div>
+            </div>
+            <p id="adminLoginError" class="activation-error" style="display: none;">⚠️ كود الأدمن غير صحيح</p>
+            <button class="btn btn-primary" onclick="verifyAdminLogin()" style="width: 100%; margin-top: 15px;">
+                <i class="fas fa-sign-in-alt"></i>
+                دخول
+            </button>
+        </div>
+    </div>
+
+    <!-- ===== ADMIN PANEL MODAL ===== -->
+    <div id="adminPanelModal" class="modal-overlay" style="display: none; z-index: 10001;">
+        <div class="modal" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3 class="modal-title">👑 لوحة صاحب الموقع</h3>
+                <button class="modal-close" onclick="closeAdminPanel()"><i class="fas fa-times"></i></button>
+            </div>
+
+            <!-- Generate Activation Code -->
+            <div class="admin-section">
+                <div class="admin-section-title">
+                    <i class="fas fa-key"></i>
+                    توليد كود تفعيل
+                </div>
+                <p style="color: var(--gray); font-size: 13px; margin-bottom: 15px;">
+                    اضغط الزرار عشان تولد كود جديد للعميل
+                </p>
+                <button class="btn btn-primary" onclick="generateAndShowCode()" style="width: 100%;">
+                    <i class="fas fa-plus"></i>
+                    توليد كود جديد
+                </button>
+
+                <div id="generatedCodeBox" class="generated-code-box" style="display: none;">
+                    <div class="generated-code-label">كود التفعيل:</div>
+                    <div class="generated-code-value" id="generatedCodeValue">ABC123</div>
+                    <button class="btn btn-outline" onclick="copyGeneratedCode()">
+                        <i class="fas fa-copy"></i>
+                        نسخ الكود
+                    </button>
+                </div>
+            </div>
+
+            <!-- Registered Devices -->
+            <div class="admin-section">
+                <div class="admin-section-title">
+                    <i class="fas fa-mobile-alt"></i>
+                    الأجهزة المسجلة في الموقع
+                </div>
+                <div id="adminDevicesList" class="admin-devices-list">
+                    <p style="color: var(--gray); text-align: center; padding: 20px;">لا توجد أجهزة مسجلة</p>
+                </div>
+            </div>
+
+            <!-- Danger Zone -->
+            <div class="admin-section admin-danger">
+                <div class="admin-section-title" style="color: var(--danger);">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    خطر!
+                </div>
+                <button class="btn btn-danger" onclick="clearAllActivations()" style="width: 100%;">
+                    <i class="fas fa-trash-alt"></i>
+                    مسح كل التفعيلات
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Panel -->
+    <div class="notification-panel" id="notificationPanel">
+        <div class="notification-stack" id="notificationStack" style="display:none;">
+            <div class="notification-stack-header">
+                <span class="stack-count" id="stackCount">0</span>
+                <span>تنبيهات</span>
+                <button class="stack-dismiss-all" onclick="dismissAllNotifications()" title="مسح الكل">
+                    <i class="fas fa-trash-alt"></i>
+                </button>
+            </div>
+            <div class="notification-stack-body" id="stackBody"></div>
+        </div>
+    </div>    
+
+    <!-- Mobile Menu Toggle (outside sidebar) -->
+    <button class="mobile-menu-toggle" id="mobileMenuToggle" onclick="toggleMobileMenu()">
+        <i class="fas fa-bars"></i>
+    </button>
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleMobileMenu()"></div>
+
+    <!-- Sidebar -->
+    <div class="sidebar" id="mainSidebar">
+        <div class="logo">
+            <img src="logo.png" alt="Logo" class="logo-img" onerror="this.style.display='none'; this.nextElementSibling.style.marginRight='0';">
+            <div class="logo-text">Tamm CRM</div>
+        </div>
+        <div class="nav-item active" onclick="showSection('dashboard')">
+            <i class="fas fa-chart-pie"></i>
+            <span>لوحة التحكم</span>
+        </div>
+        <div class="nav-item" onclick="showSection('customers')">
+            <i class="fas fa-users"></i>
+            <span>العملاء</span>
+            <span class="nav-badge" id="customerCountBadge">0</span>
+        </div>
+        <div class="nav-item" onclick="showSection('services')">
+            <i class="fas fa-box-open"></i>
+            <span>الخدمات</span>
+        </div>
+        <div class="nav-item" onclick="showSection('suppliers')">
+            <i class="fas fa-truck"></i>
+            <span>الموردين</span>
+            <span class="nav-badge" id="supplierCountBadge" style="display:none;">0</span>
+        </div>
+        <div class="nav-item" onclick="showSection('stock')">
+            <i class="fas fa-database"></i>
+            <span>مخزن الحسابات</span>
+            <span class="nav-badge" id="stockCountBadge" style="display:none;">0</span>
+        </div>
+        <div class="nav-item" onclick="showSection('add-customer')">
+            <i class="fas fa-user-plus"></i>
+            <span>إضافة عميل جديد</span>
+        </div>
+        <div class="nav-item" onclick="showSection('expiring')">
+            <i class="fas fa-clock"></i>
+            <span>اشتراكات تنتهي قريباً</span>
+            <span class="nav-badge" id="expiringBadge" style="display:none;">0</span>
+        </div>
+        <div class="nav-item" onclick="showSection('finance')">
+            <i class="fas fa-chart-line"></i>
+            <span>الإحصائيات المالية</span>
+        </div>
+
+        <div class="nav-item" onclick="openSettingsModal()">
+            <i class="fas fa-cog"></i>
+            <span>الإعدادات</span>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content" id="mainContent">        
+        <!-- Dashboard Section -->
+        <div class="section active" id="dashboard-section">
+            <!-- Trial Countdown Widget -->
+            <div class="trial-widget" id="trialWidget" style="display: none;">
+                <div class="trial-widget-icon">⏳</div>
+                <div class="trial-widget-content">
+                    <div class="trial-widget-label" id="trialWidgetLabel">الوقت المتبقي</div>
+                    <div class="trial-widget-timer" id="trialWidgetTimer">00:00:00</div>
+                </div>
+                <div class="trial-widget-status" id="trialWidgetStatus">تجريبي</div>
+            </div>
+
+            <div class="header">
+                <h1 class="header-title">لوحة التحكم</h1>
+                <div class="header-actions">
+                    <div class="export-dropdown">
+                        <button class="btn btn-success" onclick="toggleExportMenu()">
+                            <i class="fas fa-file-excel"></i>
+                            تصدير Excel
+                            <i class="fas fa-chevron-down" style="margin-right:6px;font-size:12px;"></i>
+                        </button>
+                        <div class="export-menu" id="exportMenu">
+                            <div class="export-item" onclick="exportCustomersToExcel()">
+                                <i class="fas fa-users" style="color:var(--primary)"></i>
+                                تصدير العملاء
+                            </div>
+                            <div class="export-item" onclick="exportSuppliersToExcel()">
+                                <i class="fas fa-truck" style="color:#38bdf8"></i>
+                                تصدير الموردين
+                            </div>
+                            <div class="export-item" onclick="exportFinanceToExcel()">
+                                <i class="fas fa-chart-line" style="color:var(--success)"></i>
+                                تصدير المالية
+                            </div>
+                            <div class="export-item" onclick="exportStockToExcel()">
+                                <i class="fas fa-database" style="color:var(--warning)"></i>
+                                تصدير المخزن
+                            </div>
+                        </div>
+                    </div>
+                    <button class="btn btn-primary" onclick="showSection('add-customer')">
+                        <i class="fas fa-plus"></i>
+                        عميل جديد
+                    </button>
+                </div>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card" style="--card-color: var(--primary);">
+                    <div class="stat-icon" style="background: rgba(99,102,241,0.15); color: var(--primary);">
+                        <i class="fas fa-users"></i>
+                    </div>
+                    <div class="stat-value" id="totalCustomers">0</div>
+                    <div class="stat-label">إجمالي العملاء</div>
+                </div>
+                <div class="stat-card" style="--card-color: var(--success);">
+                    <div class="stat-icon" style="background: rgba(16,185,129,0.15); color: var(--success);">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <div class="stat-value" id="activeSubscriptions">0</div>
+                    <div class="stat-label">اشتراكات نشطة</div>
+                </div>
+                <div class="stat-card" style="--card-color: var(--warning);">
+                    <div class="stat-icon" style="background: rgba(245,158,11,0.15); color: var(--warning);">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <div class="stat-value" id="expiringSoon">0</div>
+                    <div class="stat-label">تنتهي خلال يوم</div>
+                </div>
+                <div class="stat-card" style="--card-color: var(--secondary);">
+                    <div class="stat-icon" style="background: rgba(236,72,153,0.15); color: var(--secondary);">
+                        <i class="fas fa-money-bill-wave"></i>
+                    </div>
+                    <div class="stat-value" id="totalRevenue">0 ج.م</div>
+                    <div class="stat-label">إجمالي الإيرادات</div>
+                </div>
+                <div class="stat-card" style="--card-color: var(--info);">
+                    <div class="stat-icon" style="background: rgba(56,189,248,0.15); color: var(--info);">
+                        <i class="fas fa-truck"></i>
+                    </div>
+                    <div class="stat-value" id="totalSuppliers">0</div>
+                    <div class="stat-label">الموردين</div>
+                </div>
+                <div class="stat-card" style="--card-color: var(--danger);">
+                    <div class="stat-icon" style="background: rgba(239,68,68,0.15); color: var(--danger);">
+                        <i class="fas fa-piggy-bank"></i>
+                    </div>
+                    <div class="stat-value" id="totalProfit">0 ج.م</div>
+                    <div class="stat-label">صافي الربح</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">
+                    <i class="fas fa-list" style="color: var(--primary);"></i>
+                    آخر العملاء المضافين
+                </div>
+                <div id="recentCustomers">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">👥</div>
+                        <div class="empty-state-title">لا يوجد عملاء بعد</div>
+                        <div class="empty-state-text">ابدأ بإضافة عميل جديد</div>
+                        <button class="btn btn-primary" onclick="showSection('add-customer')">
+                            <i class="fas fa-plus"></i>
+                            إضافة عميل
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Customers Section -->
+        <div class="section" id="customers-section">
+            <div class="header">
+                <h1 class="header-title">قائمة العملاء</h1>
+                <div class="header-actions">
+                    <button class="btn btn-success" onclick="exportCustomersToExcel()">
+                        <i class="fas fa-file-excel"></i>
+                        تنزيل Excel العملاء
+                    </button>
+                    <button class="btn btn-primary" onclick="showSection('add-customer')">
+                        <i class="fas fa-plus"></i>
+                        عميل جديد
+                    </button>
+                </div>
+            </div>
+
+            <div class="toolbar">
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="customerSearch" placeholder="ابحث عن عميل..." oninput="filterCustomers()">
+                </div>
+                <select class="form-select" id="statusFilter" onchange="filterCustomers()" style="width: 180px;">
+                    <option value="all">كل الحالات</option>
+                    <option value="active">نشط</option>
+                    <option value="expiring">ينتهي قريباً</option>
+                    <option value="expired">منتهي</option>
+                    <option value="completed">مكتمل</option>
+                </select>
+            </div>
+
+            <div class="card">
+                <div id="customersTableContainer">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📋</div>
+                        <div class="empty-state-title">لا يوجد عملاء</div>
+                        <div class="empty-state-text">أضف عميلك الأول الآن</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Services Section -->
+        <div class="section" id="services-section">
+            <div class="header">
+                <h1 class="header-title">الخدمات</h1>
+                <div class="header-actions">
+                    <button class="btn btn-primary" onclick="openServiceModal()">
+                        <i class="fas fa-plus"></i>
+                        خدمة جديدة
+                    </button>
+                </div>
+            </div>
+
+            <div id="servicesContainer">
+                <div class="services-grid" id="servicesGrid"></div>
+            </div>
+        </div>
+
+        <!-- Suppliers Section -->
+        <div class="section" id="suppliers-section">
+            <div class="header">
+                <h1 class="header-title">الموردين</h1>
+                <div class="header-actions">
+                    <button class="btn btn-success" onclick="exportSuppliersToExcel()">
+                        <i class="fas fa-file-excel"></i>
+                        تنزيل Excel الموردين
+                    </button>
+                    <button class="btn btn-primary" onclick="openSupplierModal()">
+                        <i class="fas fa-plus"></i>
+                        مورد جديد
+                    </button>
+                </div>
+            </div>
+
+            <div class="toolbar">
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="supplierSearch" placeholder="ابحث عن مورد..." oninput="filterSuppliers()">
+                </div>
+                <select class="form-select" id="supplierStatusFilter" onchange="filterSuppliers()" style="width: 180px;">
+                    <option value="all">كل الحالات</option>
+                    <option value="active">نشط</option>
+                    <option value="inactive">متوقف</option>
+                </select>
+            </div>
+
+            <div class="card">
+                <div id="suppliersTableContainer">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">🚚</div>
+                        <div class="empty-state-title">لا يوجد موردين</div>
+                        <div class="empty-state-text">أضف موردك الأول الآن</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- Stock Section -->
+        <div class="section" id="stock-section">
+            <div class="header">
+                <h1 class="header-title">مخزن الحسابات</h1>
+                <div class="header-actions">
+                    <button class="btn btn-success" onclick="exportStockToExcel()">
+                        <i class="fas fa-file-excel"></i>
+                        تنزيل Excel المخزن
+                    </button>
+                    <button class="btn btn-primary" onclick="openStockModal()">
+                        <i class="fas fa-plus"></i>
+                        إضافة حساب جديد
+                    </button>
+                </div>
+            </div>
+
+            <div class="toolbar">
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="stockSearch" placeholder="ابحث بالإيميل..." oninput="filterStock()">
+                </div>
+                <select class="form-select" id="stockStatusFilter" onchange="filterStock()" style="width: 180px;">
+                    <option value="all">كل الحالات</option>
+                    <option value="available">متاح</option>
+                    <option value="finished">منتهي</option>
+                </select>
+            </div>
+
+            <div class="card">
+                <div id="stockTableContainer">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📧</div>
+                        <div class="empty-state-title">لا يوجد حسابات</div>
+                        <div class="empty-state-text">أضف حسابك الأول في المخزن</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Add Customer Section -->
+        <div class="section" id="add-customer-section">
+            <div class="header">
+                <h1 class="header-title">إضافة عميل جديد</h1>
+            </div>
+
+            <div class="card">
+                <div class="card-title">
+                    <i class="fas fa-user-plus" style="color: var(--primary);"></i>
+                    بيانات العميل
+                </div>
+                <form id="customerForm" onsubmit="addCustomer(event)">
+                    <input type="hidden" id="customerGroupId" value="">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label class="form-label">اسم العميل *</label>
+                            <input type="text" class="form-input" id="customerName" required placeholder="أدخل اسم العميل">
+                        </div>
+                             <div class="form-group">
+                            <label class="form-label">مصدر العميل *</label>
+                            <select class="form-select" id="customerSource" required>
+                                <option value="whatsapp">واتساب</option>
+                                <option value="messenger">مسنجر</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">رقم هاتف العميل (اختياري)</label>
+                            <input type="tel" class="form-input" id="customerPhone" placeholder="مثال: 01012345678">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">الحساب من المخزن <span style="color:var(--gray);font-size:12px;">(اختياري)</span></label>
+                            <select class="form-select" id="customerStockItem" onchange="updateStockPreview()">
+                                <option value="">اختر حساب من المخزن</option>
+                            </select>
+                            <p id="noStockMsg" style="color: var(--warning); font-size: 12px; margin-top: 5px; display: none;">
+                                ⚠️ مفيش حسابات متاحة - <a href="#" onclick="showSection('stock'); return false;" style="color: var(--primary);">ضيف حساب من هنا</a>
+                            </p>
+                            <div id="stockPreview" style="margin-top: 10px; padding: 12px; background: rgba(99,102,241,0.05); border: 1px solid var(--glass-border); border-radius: 12px; display: none;">
+                                <div style="font-size: 13px; color: var(--gray); margin-bottom: 4px;"><i class="fas fa-envelope" style="color: var(--primary); margin-left: 5px;"></i> <span id="stockPreviewEmail" style="color: var(--light); font-weight: 600;"></span></div>
+                                <div style="font-size: 13px; color: var(--gray);"><i class="fas fa-key" style="color: var(--warning); margin-left: 5px;"></i> <span id="stockPreviewPassword" style="color: var(--light); font-weight: 600;"></span></div>
+                                <div style="font-size: 12px; color: var(--success); margin-top: 6px;"><i class="fas fa-users" style="margin-left: 5px;"></i> متبقي: <strong id="stockPreviewRemaining">0</strong> مستخدم</div>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">الخدمة المشتراة *</label>
+                            <select class="form-select" id="customerService" required onchange="updatePrice()">
+                            </select>
+                            <p id="noServicesMsg" style="color: var(--warning); font-size: 12px; margin-top: 5px; display: none;">
+                                ⚠️ مفيش خدمات - <a href="#" onclick="showSection('services'); return false;" style="color: var(--primary);">ضيف خدمة من هنا</a>
+                            </p>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">المورد *</label>
+                            <select class="form-select" id="customerSupplier" required>
+                                <option value="">اختر المورد</option>
+                            </select>
+                            <p id="noSuppliersMsg" style="color: var(--warning); font-size: 12px; margin-top: 5px; display: none;">
+                                ⚠️ مفيش موردين - <a href="#" onclick="showSection('suppliers'); return false;" style="color: var(--primary);">ضيف مورد من هنا</a>
+                            </p>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">سعر الشراء (من المورد) *</label>
+                            <input type="number" class="form-input" id="customerCostPrice" required placeholder="أدخل سعر الشراء">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">سعر البيع (للعميل) *</label>
+                            <input type="number" class="form-input" id="customerSellPrice" required placeholder="أدخل سعر البيع">
+                        </div>
+                        <div class="form-group" style="border: 1px solid var(--success); border-radius: 12px; padding: 14px 16px; background: rgba(16,185,129,0.05);">
+                            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:700;color:var(--success);">
+                                <input type="checkbox" id="customerWhatsAppPaid" style="width:18px;height:18px;accent-color:var(--success);">
+                                <span><i class="fab fa-whatsapp"></i> دفع واتساب</span>
+                            </label>
+                            <p style="color:var(--gray);font-size:12px;margin:7px 0 0;line-height:1.7;">لو العميل دفع لك على واتساب، علّم هنا وسيتم استهلاك التحويل المطابق من الشيت تلقائيًا.</p>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">تاريخ بداية الاشتراك *</label>
+                            <div class="date-picker-container">
+                                <div class="date-display" id="startDateDisplay" onclick="toggleCalendar('start')">
+                                    <span id="startDateText">اختر التاريخ</span>
+                                    <i class="fas fa-calendar-alt"></i>
+                                </div>
+                                <div class="custom-calendar" id="startCalendar">
+                                    <div class="calendar-header">
+                                        <button type="button" class="calendar-nav" onclick="changeMonth('start', -1)"><i class="fas fa-chevron-right"></i></button>
+                                        <span class="calendar-title" id="startCalendarTitle"></span>
+                                        <button type="button" class="calendar-nav" onclick="changeMonth('start', 1)"><i class="fas fa-chevron-left"></i></button>
+                                    </div>
+                                    <div class="calendar-grid" id="startCalendarGrid"></div>
+                                </div>
+                            </div>
+                            <input type="hidden" id="startDate" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">تاريخ نهاية الاشتراك *</label>
+                            <div class="date-picker-container">
+                                <div class="date-display" id="endDateDisplay" onclick="toggleCalendar('end')">
+                                    <span id="endDateText">اختر التاريخ</span>
+                                    <i class="fas fa-calendar-alt"></i>
+                                </div>
+                                <div class="custom-calendar" id="endCalendar">
+                                    <div class="calendar-header">
+                                        <button type="button" class="calendar-nav" onclick="changeMonth('end', -1)"><i class="fas fa-chevron-right"></i></button>
+                                        <span class="calendar-title" id="endCalendarTitle"></span>
+                                        <button type="button" class="calendar-nav" onclick="changeMonth('end', 1)"><i class="fas fa-chevron-left"></i></button>
+                                    </div>
+                                    <div class="calendar-grid" id="endCalendarGrid"></div>
+                                </div>
+                            </div>
+                            <input type="hidden" id="endDate" required>
+                        </div>
+                        <div class="form-group full-width">
+                            <label class="form-label">ملاحظات</label>
+                            <input type="text" class="form-input" id="customerNotes" placeholder="أي ملاحظات إضافية...">
+                        </div>
+                    </div>
+                    <!-- رسالة جاهزة للعميل -->
+                    <div class="form-group full-width" style="margin-top: 20px; padding: 20px; background: rgba(99,102,241,0.05); border: 1px dashed var(--primary); border-radius: 16px;">
+                        <label class="form-label" style="color: var(--primary);">
+                            <i class="fas fa-comment-dots"></i> رسالة جاهزة للعميل
+                        </label>
+                        <textarea class="form-input" id="readyMessage" rows="4" readonly style="background: rgba(0,0,0,0.2); font-size: 14px; line-height: 1.8;"></textarea>
+                        <div style="display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
+                            <button type="button" class="btn btn-success" onclick="copyMessage()" style="font-size: 13px;">
+                                <i class="fas fa-copy"></i> نسخ الرسالة
+                            </button>
+                            <button type="button" class="btn btn-primary" onclick="sendViaWhatsApp()" style="font-size: 13px; background: linear-gradient(135deg, #25d366, #128c7e);">
+                                <i class="fab fa-whatsapp"></i> إرسال واتساب
+                            </button>
+                            <button type="button" class="btn btn-primary" onclick="generateMessage()" style="font-size: 13px;">
+                                <i class="fas fa-magic"></i> توليد رسالة
+                            </button>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 25px; display: flex; gap: 12px;">
+                        <button type="submit" class="btn btn-success">
+                            <i class="fas fa-check"></i>
+                            إضافة العميل
+                        </button>
+                        <button type="button" class="btn btn-outline" onclick="resetForm()">
+                            <i class="fas fa-redo"></i>
+                            إعادة تعيين
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Expiring Section -->
+        <div class="section" id="expiring-section">
+            <div class="header">
+                <h1 class="header-title">اشتراكات تنتهي قريباً</h1>
+            </div>
+            <div class="card">
+                <div id="expiringContainer"></div>
+            </div>
+        </div>
+
+        <!-- Finance Statistics Section -->
+        <div class="section" id="finance-section">
+            <div class="header">
+                <h1 class="header-title">الإحصائيات المالية</h1>
+                <div class="header-actions">
+                    <button class="btn btn-success" onclick="exportFinanceToExcel()">
+                        <i class="fas fa-file-excel"></i>
+                        تنزيل Excel المالية
+                    </button>
+                    <button class="btn btn-primary" onclick="openExpenseModal()">
+                        <i class="fas fa-plus"></i>
+                        مصروف جديد
+                    </button>
+                </div>
+            </div>
+
+            <!-- Financial Summary Cards -->
+            <div class="stats-grid" style="margin-bottom: 30px;">
+                <div class="stat-card" style="--card-color: var(--success);">
+                    <div class="stat-icon" style="background: rgba(16,185,129,0.15); color: var(--success);">
+                        <i class="fas fa-hand-holding-usd"></i>
+                    </div>
+                    <div class="stat-value" id="totalRevenueFinance">0 ج.م</div>
+                    <div class="stat-label">إجمالي الإيرادات</div>
+                </div>
+                <div class="stat-card" style="--card-color: var(--danger);">
+                    <div class="stat-icon" style="background: rgba(239,68,68,0.15); color: var(--danger);">
+                        <i class="fas fa-file-invoice-dollar"></i>
+                    </div>
+                    <div class="stat-value" id="totalExpenses">0 ج.م</div>
+                    <div class="stat-label">إجمالي المصروفات</div>
+                </div>
+                <div class="stat-card" style="--card-color: var(--primary);">
+                    <div class="stat-icon" style="background: rgba(99,102,241,0.15); color: var(--primary);">
+                        <i class="fas fa-piggy-bank"></i>
+                    </div>
+                    <div class="stat-value" id="netProfit">0 ج.م</div>
+                    <div class="stat-label">صافي الربح</div>
+                </div>
+                <div class="stat-card" style="--card-color: var(--warning);">
+                    <div class="stat-icon" style="background: rgba(245,158,11,0.15); color: var(--warning);">
+                        <i class="fas fa-percentage"></i>
+                    </div>
+                    <div class="stat-value" id="profitPercentage">0%</div>
+                    <div class="stat-label">نسبة الربح</div>
+                </div>
+            </div>
+
+            <!-- Expenses List -->
+            <div class="card">
+                <div class="card-title">
+                    <i class="fas fa-list-ul" style="color: var(--danger);"></i>
+                    قائمة المصروفات
+                </div>
+                <div id="expensesContainer">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">💸</div>
+                        <div class="empty-state-title">لا توجد مصروفات</div>
+                        <div class="empty-state-text">أضف مصروفاتك لحساب صافي الربح</div>
+                        <button class="btn btn-primary" onclick="openExpenseModal()">
+                            <i class="fas fa-plus"></i> إضافة مصروف
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Profit Breakdown -->
+            <div class="card" style="margin-top: 20px;">
+                <div class="card-title">
+                    <i class="fas fa-chart-pie" style="color: var(--primary);"></i>
+                    تفصيل الربح
+                </div>
+                <div id="profitBreakdown"></div>
+            </div>
+        </div>
+
+        <!-- Activity Log Section -->
+        <div class="section" id="activity-log-section">
+            <div class="header">
+                <h1 class="header-title">سجل النشاط</h1>
+                <div class="header-actions">
+                    <button class="btn btn-danger" onclick="clearActivityLog()">
+                        <i class="fas fa-trash-alt"></i>
+                        مسح السجل
+                    </button>
+                </div>
+            </div>
+
+            <div class="toolbar">
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="activitySearch" placeholder="ابحث في السجل..." oninput="filterActivityLog()">
+                </div>
+                <select class="form-select" id="activityTypeFilter" onchange="filterActivityLog()" style="width: 180px;">
+                    <option value="all">كل العمليات</option>
+                    <option value="customer_create">إنشاء عميل</option>
+                    <option value="customer_edit">تعديل عميل</option>
+                    <option value="customer_delete">حذف عميل</option>
+                    <option value="subscription_create">إنشاء اشتراك</option>
+                    <option value="subscription_edit">تعديل اشتراك</option>
+                    <option value="subscription_delete">حذف اشتراك</option>
+                    <option value="subscription_renew">تجديد اشتراك</option>
+                    <option value="supplier_create">إضافة مورد</option>
+                    <option value="supplier_edit">تعديل مورد</option>
+                    <option value="supplier_delete">حذف مورد</option>
+                    <option value="settings">تعديل إعدادات</option>
+                </select>
+                <input type="date" class="form-input" id="activityDateFilter" onchange="filterActivityLog()" style="width: 160px;">
+            </div>
+
+            <div class="card">
+                <div id="activityLogContainer">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📋</div>
+                        <div class="empty-state-title">لا يوجد سجل نشاط</div>
+                        <div class="empty-state-text">سيتم تسجيل جميع العمليات تلقائياً</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stock Modal -->
+    <div class="modal-overlay" id="stockModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title" id="stockModalTitle">إضافة حساب جديد</h3>
+                <button class="modal-close" onclick="closeStockModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <form onsubmit="addStock(event)">
+                <input type="hidden" id="stockId">
+                <div class="form-group">
+                    <label class="form-label">الإيميل *</label>
+                    <input type="email" class="form-input" id="stockEmail" required placeholder="example@email.com">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">الباسورد *</label>
+                    <input type="text" class="form-input" id="stockPassword" required placeholder="أدخل الباسورد">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">عدد المستخدمين المسموح *</label>
+                    <select class="form-select" id="stockMaxUsers" required>
+                        <option value="1">1 مستخدم</option>
+                        <option value="2" selected>2 مستخدم (افتراضي)</option>
+                        <option value="3">3 مستخدمين</option>
+                        <option value="4">4 مستخدمين</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">ملاحظات</label>
+                    <input type="text" class="form-input" id="stockNotes" placeholder="أي ملاحظات...">
+                </div>
+                <div style="margin-top: 20px; display: flex; gap: 12px;">
+                    <button type="submit" class="btn btn-success" id="stockSubmitBtn">إضافة الحساب</button>
+                    <button type="button" class="btn btn-outline" onclick="closeStockModal()">إلغاء</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Service Modal -->
+    <div class="modal-overlay" id="serviceModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title">إضافة خدمة جديدة</h3>
+                <button class="modal-close" onclick="closeServiceModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <form onsubmit="addService(event)">
+                <div class="form-group">
+                    <label class="form-label">اسم الخدمة *</label>
+                    <input type="text" class="form-input" id="serviceName" required placeholder="مثال: Adobe Creative Cloud">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">السعر *</label>
+                    <input type="number" class="form-input" id="servicePrice" required placeholder="أدخل السعر بالجنيه">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">الأيقونة</label>
+                    <select class="form-select" id="serviceIcon">
+                        <option value="🎨">🎨 تصميم</option>
+                        <option value="🎬">🎬 مونتاج</option>
+                        <option value="🛠️">🛠️ أدوات</option>
+                        <option value="☁️">☁️ سحابي</option>
+                    </select>
+                </div>
+                <div style="margin-top: 20px; display: flex; gap: 12px;">
+                    <button type="submit" class="btn btn-success">إضافة الخدمة</button>
+                    <button type="button" class="btn btn-outline" onclick="closeServiceModal()">إلغاء</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Supplier Modal -->
+    <div class="modal-overlay" id="supplierModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title" id="supplierModalTitle">إضافة مورد جديد</h3>
+                <button class="modal-close" onclick="closeSupplierModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <form onsubmit="saveSupplier(event)">
+                <input type="hidden" id="supplierId">
+                <div class="form-group">
+                    <label class="form-label">اسم المورد *</label>
+                    <input type="text" class="form-input" id="supplierName" required placeholder="أدخل اسم المورد">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">رقم الهاتف / وسيلة التواصل</label>
+                    <input type="text" class="form-input" id="supplierPhone" placeholder="مثال: 01012345678">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">الحالة</label>
+                    <select class="form-select" id="supplierStatus">
+                        <option value="active">نشط</option>
+                        <option value="inactive">متوقف</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">ملاحظات</label>
+                    <textarea class="form-input" id="supplierNotes" rows="3" placeholder="أي ملاحظات إضافية..."></textarea>
+                </div>
+                <div style="margin-top: 20px; display: flex; gap: 12px;">
+                    <button type="submit" class="btn btn-success" id="supplierSubmitBtn">إضافة المورد</button>
+                    <button type="button" class="btn btn-outline" onclick="closeSupplierModal()">إلغاء</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Supplier Details Modal -->
+    <div class="modal-overlay" id="supplierDetailsModal">
+        <div class="modal" style="max-width: 700px;">
+            <div class="modal-header">
+                <h3 class="modal-title" id="supplierDetailsTitle">تفاصيل المورد</h3>
+                <button class="modal-close" onclick="closeSupplierDetailsModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div id="supplierDetailsContent"></div>
+        </div>
+    </div>
+
+    <!-- Customer Profile Modal -->
+    <div class="modal-overlay" id="customerProfileModal">
+        <div class="modal" style="max-width: 800px;">
+            <div class="modal-header">
+                <h3 class="modal-title" id="customerProfileTitle">ملف العميل</h3>
+                <button class="modal-close" onclick="closeCustomerProfileModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div id="customerProfileContent"></div>
+        </div>
+    </div>
+
+    <!-- Edit Customer Profile Modal (Feature 2) -->
+    <div class="modal-overlay" id="editProfileModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title"><i class="fas fa-user-edit"></i> تعديل بيانات العميل</h3>
+                <button class="modal-close" onclick="closeEditProfileModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <form onsubmit="saveEditProfile(event)">
+                <input type="hidden" id="editProfileGroupId">
+                <div class="form-group">
+                    <label class="form-label">اسم العميل *</label>
+                    <input type="text" class="form-input" id="editProfileName" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">رقم الهاتف</label>
+                    <input type="tel" class="form-input" id="editProfilePhone" placeholder="مثال: 01012345678">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">مصدر العميل *</label>
+                    <select class="form-select" id="editProfileSource" required>
+                        <option value="whatsapp">واتساب</option>
+                        <option value="messenger">مسنجر</option>
+                        <option value="telegram">تيليجرام</option>
+                        <option value="instagram">انستجرام</option>
+                        <option value="facebook">فيسبوك</option>
+                        <option value="direct">مباشر</option>
+                        <option value="other">أخرى</option>
+                    </select>
+                </div>
+                <div style="margin-top: 20px; display: flex; gap: 12px;">
+                    <button type="submit" class="btn btn-success"><i class="fas fa-check"></i> حفظ التعديلات</button>
+                    <button type="button" class="btn btn-outline" onclick="closeEditProfileModal()">إلغاء</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Subscription Modal (Feature 2) -->
+    <div class="modal-overlay" id="editSubscriptionModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title"><i class="fas fa-edit"></i> تعديل الاشتراك</h3>
+                <button class="modal-close" onclick="closeEditSubscriptionModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <form onsubmit="saveEditSubscription(event)">
+                <input type="hidden" id="editSubId">
+                <div class="form-group">
+                    <label class="form-label">الخدمة *</label>
+                    <select class="form-select" id="editSubService" required></select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">المورد</label>
+                    <select class="form-select" id="editSubSupplier"></select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">سعر الشراء *</label>
+                    <input type="number" class="form-input" id="editSubCostPrice" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">سعر البيع *</label>
+                    <input type="number" class="form-input" id="editSubSellPrice" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">تاريخ البداية *</label>
+                    <input type="date" class="form-input" id="editSubStartDate" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">تاريخ النهاية *</label>
+                    <input type="date" class="form-input" id="editSubEndDate" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">ملاحظات</label>
+                    <input type="text" class="form-input" id="editSubNotes">
+                </div>
+                <div style="margin-top: 20px; display: flex; gap: 12px;">
+                    <button type="submit" class="btn btn-success"><i class="fas fa-check"></i> حفظ التعديلات</button>
+                    <button type="button" class="btn btn-outline" onclick="closeEditSubscriptionModal()">إلغاء</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Renewal Modal (Feature 4 + 5) -->
+    <div class="modal-overlay" id="renewalModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title"><i class="fas fa-sync-alt"></i> تجديد اشتراك</h3>
+                <button class="modal-close" onclick="closeRenewalModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <form onsubmit="confirmRenewal(event)">
+                <input type="hidden" id="renewalGroupId">
+                <div class="form-group">
+                    <label class="form-label">اختر الاشتراك المطلوب تجديده *</label>
+                    <select class="form-select" id="renewalSubSelect" required></select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">مدة التجديد *</label>
+                    <select class="form-select" id="renewalDuration" onchange="toggleRenewalCustomDays()" required>
+                        <option value="7">أسبوع (7 أيام)</option>
+                        <option value="30" selected>شهر (30 يوم)</option>
+                        <option value="90">3 شهور (90 يوم)</option>
+                        <option value="180">6 شهور (180 يوم)</option>
+                        <option value="365">سنة كاملة (365 يوم)</option>
+                        <option value="custom">مدة مخصصة...</option>
+                    </select>
+                </div>
+                <div class="form-group" id="renewalCustomDaysWrap">
+                    <label class="form-label">عدد الأيام المخصص</label>
+                    <input type="number" class="form-input" id="renewalCustomDays" min="1" style="display:none;" placeholder="أدخل عدد الأيام">
+                </div>
+                <div style="margin-top: 20px; display: flex; gap: 12px;">
+                    <button type="submit" class="btn btn-success"><i class="fas fa-check"></i> تأكيد التجديد</button>
+                    <button type="button" class="btn btn-outline" onclick="closeRenewalModal()">إلغاء</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Expense Modal -->
+    <div class="modal-overlay" id="expenseModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title">إضافة مصروف جديد</h3>
+                <button class="modal-close" onclick="closeExpenseModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <form onsubmit="addExpense(event)">
+                <div class="form-group">
+                    <label class="form-label">الخدمة *</label>
+                    <select class="form-select" id="expenseService" required onchange="updateExpenseServiceName()">
+                        <option value="">اختر الخدمة</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">وصف المصروف</label>
+                    <input type="text" class="form-input" id="expenseDesc" placeholder="مثال: تجديد شهري - حساب رئيسي">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">المبلغ المدفوع *</label>
+                    <input type="number" class="form-input" id="expenseAmount" required placeholder="أدخل المبلغ بالجنيه">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">التاريخ *</label>
+                    <div class="date-picker-container">
+                        <div class="date-display" id="expenseDateDisplay" onclick="toggleExpenseCalendar()">
+                            <span id="expenseDateText">اختر التاريخ</span>
+                            <i class="fas fa-calendar-alt"></i>
+                        </div>
+                        <div class="custom-calendar" id="expenseCalendar">
+                            <div class="calendar-header">
+                                <button type="button" class="calendar-nav" onclick="changeExpenseMonth(-1)"><i class="fas fa-chevron-right"></i></button>
+                                <span class="calendar-title" id="expenseCalendarTitle"></span>
+                                <button type="button" class="calendar-nav" onclick="changeExpenseMonth(1)"><i class="fas fa-chevron-left"></i></button>
+                            </div>
+                            <div class="calendar-grid" id="expenseCalendarGrid"></div>
+                        </div>
+                    </div>
+                    <input type="hidden" id="expenseDate" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">ملاحظات</label>
+                    <input type="text" class="form-input" id="expenseNotes" placeholder="أي ملاحظات...">
+                </div>
+                <div style="margin-top: 20px; display: flex; gap: 12px;">
+                    <button type="submit" class="btn btn-success">حفظ المصروف</button>
+                    <button type="button" class="btn btn-outline" onclick="closeExpenseModal()">إلغاء</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Sound Toggle -->
+    <button class="sound-toggle" id="soundToggle" onclick="toggleSound()" title="تشغيل/إيقاف الصوت">
+        <i class="fas fa-volume-up" id="soundIcon"></i>
+    </button>
+
+    <!-- Settings Modal -->
+    <div class="modal-overlay" id="settingsModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title">⚙️ الإعدادات</h3>
+                <button class="modal-close" onclick="closeSettingsModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <form onsubmit="saveSettings(event)">
+                <!-- Store Name -->
+                <div class="form-group">
+                    <label class="form-label">🏪 اسم المتجر</label>
+                    <input type="text" class="form-input" id="merchantName" placeholder="مثال: Tamm Store">
+                </div>
+
+                <div class="form-group" style="border:1px solid var(--success);border-radius:12px;padding:15px;">
+                    <label class="form-label" style="color:var(--success);"><i class="fas fa-link"></i> ربط دفع واتساب بالشيت</label>
+                    <p style="color:var(--gray);font-size:12px;margin:8px 0;line-height:1.7;">إعداد مرة واحدة فقط. استخدم نفس رابط Google Apps Script والمفتاح السري الموجودين في نظام الدفع.</p>
+                    <input type="url" class="form-input" id="sheetsVerifyUrl" placeholder="رابط /exec الخاص بـ Google Apps Script" style="direction:ltr;text-align:left;margin-bottom:10px;">
+                    <input type="password" class="form-input" id="sheetsVerifySecret" placeholder="VERIFY_SECRET" style="direction:ltr;text-align:left;">
+                </div>
+
+                <!-- Push Notifications -->
+                <div class="form-group" style="border: 1px solid var(--primary); border-radius: 12px; padding: 15px;">
+                    <label class="form-label" style="color: var(--primary);">
+                        <i class="fas fa-bell"></i> إشعارات المتصفح
+                    </label>
+                    <p style="color: var(--gray); font-size: 12px; margin: 8px 0;">
+                        هتجيلك إشعارات لما يجي معاد تجديد الاشتراكات
+                    </p>
+                    <button type="button" class="btn btn-primary" onclick="requestPushPermission()" style="width: 100%;">
+                        <i class="fas fa-bell"></i> تفعيل الإشعارات
+                    </button>
+                </div>
+
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                        <input type="checkbox" id="autoNotify" checked style="width: 18px; height: 18px;">
+                        <span>تفعيل الإشعارات التلقائية</span>
+                    </label>
+                </div>
+
+                                <!-- Client Activation Section -->
+                <div class="form-group" style="border: 1px solid var(--success); border-radius: 12px; padding: 15px; margin-bottom: 20px;">
+                    <label class="form-label" style="color: var(--success);">
+                        <i class="fas fa-key"></i> تفعيل اشتراكك
+                    </label>
+                    <p style="color: var(--gray); font-size: 12px; margin: 8px 0;">
+                        أدخل كود التفعيل اللي استلمته عشان تفتح الموقع دايماً (حتى قبل ما الفترة التجريبية تخلص)
+                    </p>
+                    <div class="activation-code-inputs" style="margin: 10px 0;">
+                        <input type="password" class="code-digit settings-code-digit" maxlength="1" data-index="0" autocomplete="off">
+                        <input type="password" class="code-digit settings-code-digit" maxlength="1" data-index="1" autocomplete="off">
+                        <input type="password" class="code-digit settings-code-digit" maxlength="1" data-index="2" autocomplete="off">
+                        <input type="password" class="code-digit settings-code-digit" maxlength="1" data-index="3" autocomplete="off">
+                        <input type="password" class="code-digit settings-code-digit" maxlength="1" data-index="4" autocomplete="off">
+                        <input type="password" class="code-digit settings-code-digit" maxlength="1" data-index="5" autocomplete="off">
+                    </div>
+                    <p id="settingsActivationError" class="activation-error" style="display: none; margin-top: 8px;">⚠️ الكود غير صحيح</p>
+                    <button type="button" class="btn btn-success" onclick="activateFromSettings()" style="width: 100%; margin-top: 10px;">
+                        <i class="fas fa-unlock"></i> تفعيل الاشتراك
+                    </button>
+                </div>
+
+                
+                <!-- Data Transfer Section -->
+        <div class="form-group" style="border: 2px solid var(--info); border-radius: 12px; padding: 15px; margin-bottom: 20px; margin-top: 25px;">
+            <label class="form-label" style="color: var(--info);">
+                <i class="fas fa-exchange-alt"></i> نقل البيانات بين الأجهزة
+            </label>
+            <p style="color: var(--gray); font-size: 12px; margin: 8px 0;">
+                انقل بياناتك بضغطة زر. الكود المضغوط أصغر بكتير من قبل.
+            </p>
+        
+            <!-- أزرار الملف (أسهل للبيانات الكبيرة) -->
+            <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
+                <button type="button" class="btn btn-primary" onclick="exportToFile()" style="flex:1;min-width:140px;">
+                    <i class="fas fa-file-download"></i> تحميل ملف JSON
+                </button>
+                <label class="btn btn-success" style="flex:1;min-width:140px;cursor:pointer;text-align:center;">
+                    <i class="fas fa-file-upload"></i> رفع ملف JSON
+                    <input type="file" accept=".json" onchange="importFromFile(this)" style="display:none;">
+                </label>
+            </div>
+        
+            <div style="border-top: 1px dashed var(--glass-border); margin: 15px 0; text-align:center;">
+                <span style="color:var(--gray);font-size:12px;">أو استخدم الكود المضغوط</span>
+            </div>
+        
+            <!-- Export -->
+            <div style="margin-bottom: 15px;">
+                <button type="button" class="btn btn-primary" onclick="exportAllData()" style="width: 100%; margin-bottom: 10px;">
+                    <i class="fas fa-file-export"></i> تصدير كود مضغوط
+                </button>
+                <textarea class="form-input" id="exportDataArea" rows="3" readonly placeholder="هنا هيظهر الكود المضغوط..." style="font-size: 12px; font-family: monospace; direction: ltr; text-align: left; background: rgba(0,0,0,0.2); display: none;"></textarea>
+                <button type="button" class="btn btn-success" id="copyExportBtn" onclick="copyExportCode()" style="width: 100%; margin-top: 8px; display: none;">
+                    <i class="fas fa-copy"></i> نسخ الكود
+                </button>
+            </div>
+        
+            <div style="border-top: 1px dashed var(--glass-border); margin: 15px 0;"></div>
+        
+            <!-- Import -->
+            <div>
+                <label class="form-label" style="font-size: 13px; color: var(--gray);">
+                    <i class="fas fa-file-import"></i> استيراد من كود مضغوط
+                </label>
+                <textarea class="form-input" id="importDataArea" rows="3" placeholder="الصق الكود المضغوط هنا..." style="font-size: 12px; font-family: monospace; direction: ltr; text-align: left; margin-bottom: 10px;"></textarea>
+                <button type="button" class="btn btn-success" onclick="importAllData()" style="width: 100%;">
+                    <i class="fas fa-download"></i> استيراد الكود
+                </button>
+                <p id="importStatus" style="margin-top: 8px; font-size: 13px; display: none;"></p>
+            </div>
+        </div>
+
+                <!-- Admin Access Section (Hidden by default) -->
+                <div class="admin-access-section" id="adminAccessSection">
+                    <div class="admin-access-divider">
+                        <span>🔐 منطقة الأدمن</span>
+                    </div>
+
+                    <!-- Admin Login Input -->
+                    <div class="form-group" id="adminLoginForm">
+                        <label class="form-label" style="color: var(--warning);">
+                            <i class="fas fa-shield-alt"></i> أدخل كود الأدمن السري
+                        </label>
+                        <div class="admin-login-row">
+                            <input type="password" class="admin-code-input" id="settingsAdminCodeInput" placeholder="••••••" maxlength="6">
+                            <button type="button" class="btn btn-primary" onclick="verifySettingsAdminCode()">
+                                <i class="fas fa-unlock"></i> دخول
+                            </button>
+                        </div>
+                        <p id="settingsAdminError" class="activation-error" style="display: none; margin-top: 8px;">⚠️ كود الأدمن غير صحيح</p>
+                    </div>
+
+                    <!-- Hidden Admin Controls (shown after verification) -->
+                    <div id="adminControlsArea" style="display: none;">
+
+                        <!-- Change Admin Code -->
+                        <div class="form-group admin-code-section">
+                            <label class="form-label" style="color: var(--warning);">
+                                <i class="fas fa-key"></i> تغيير كود الأدمن السري
+                            </label>
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <input type="password" class="admin-code-input" id="adminSecretCodeInput" placeholder="كود جديد 6 أحرف" maxlength="6">
+                                <button type="button" class="btn btn-outline" onclick="toggleAdminCodeVisibility()" style="padding: 10px 14px;">
+                                    <i class="fas fa-eye" id="adminCodeEye"></i>
+                                </button>
+                            </div>
+                            <button type="button" class="btn btn-primary" onclick="saveAdminSecretCodeFromSettings()" style="width: 100%; margin-top: 10px;">
+                                <i class="fas fa-save"></i> حفظ الكود الجديد
+                            </button>
+                        </div>
+
+                        <!-- Client Activation -->
+                        <div class="form-group" style="border: 1px solid var(--primary); border-radius: 12px; padding: 15px;">
+                            <label class="form-label" style="color: var(--primary);">
+                                <i class="fas fa-lock"></i> تفعيل العملاء
+                            </label>
+                            <p style="color: var(--gray); font-size: 12px; margin: 8px 0;">
+                                اضغط الزرار عشان تولد كود جديد للعميل
+                            </p>
+                            <button type="button" class="btn btn-primary" onclick="handleGenerateCodeClick()" style="width: 100%;">
+                                <i class="fas fa-plus"></i> توليد كود جديد
+                            </button>
+                        </div>
+
+                    </div>
+                </div>
+
+                <div style="margin-top: 20px; display: flex; gap: 12px;">
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-save"></i> حفظ
+                    </button>
+                    <button type="button" class="btn btn-primary" onclick="testNotificationNow()" style="background: linear-gradient(135deg, var(--warning), #d97706);">
+                        <i class="fas fa-paper-plane"></i> جرب الإرسال
+                    </button>
+                    <button type="button" class="btn btn-outline" onclick="closeSettingsModal()">إلغاء</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Push Notification Toggle -->
+    <button class="push-toggle muted" id="pushToggle" onclick="togglePushNotifications()" title="تفعيل الإشعارات">
+        <i class="fas fa-bell-slash" id="pushIcon"></i>
+    </button>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
+    <script src="script.js?v=4.0.0"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🚀 DOM جاهز!');
+
+            if (typeof loadData === 'function') {
+                loadData();
+                console.log('📊 البيانات:', {
+                    customers: window.customers?.length || 0,
+                    services: window.services?.length || 0,
+                    expenses: window.expenses?.length || 0,
+                    suppliers: window.suppliers?.length || 0,
+                    activityLog: window.activityLog?.length || 0
+                });
+            }
+
+            if (typeof renderAll === 'function') {
+                renderAll();
+                console.log('🎨 UI محدث');
+            }
+
+            if (typeof renderServices === 'function') {
+                renderServices();
+                console.log('📦 الخدمات:', window.services?.length || 0);
+            }
+
+            if (typeof initActivationSystem === 'function') {
+                initActivationSystem();
+            }
+        });
+    </script>
+
+</body>
+</html>

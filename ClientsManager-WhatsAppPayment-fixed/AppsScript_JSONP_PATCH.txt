@@ -1,0 +1,23 @@
+استبدل دالة doGet الحالية بهذا الكود، وأضف الدالة jsonpOut_ أسفل jsonOut_ مباشرة.
+
+function jsonpOut_(obj, callback) {
+  var safeCallback = String(callback || '').replace(/[^a-zA-Z0-9_.$]/g, '');
+  if (!safeCallback) return jsonOut_(obj);
+  return ContentService.createTextOutput(safeCallback + '(' + JSON.stringify(obj) + ')')
+    .setMimeType(ContentService.MimeType.JAVASCRIPT);
+}
+
+function doGet(e) {
+  var params = (e && e.parameter) || {};
+  var result;
+  if (params.action === 'verify_and_use') {
+    result = verifyAndUse_(params.phone, params.amount, params.secret);
+  } else {
+    result = logSmsRow_(params.message || '', params.sender || '');
+  }
+  return params.callback ? jsonpOut_(result, params.callback) : jsonOut_(result);
+}
+
+مهم: لا تغيّر doPost ولا باقي الكود.
+بعد الحفظ اعمل Deploy > Manage deployments > Edit > New version > Deploy.
+واستخدم نفس رابط /exec الموجود حاليًا في إعدادات الـCRM.
